@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Current PR: A5
+Last updated: 2026-11-06 14:20 IST   Branch: anirudh/A6-architecture   Current PR: A6
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -23,15 +23,20 @@ Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Curr
 - A5: `crashpoint.go` real SIGKILL hook, all 13 SPEC names wired (commit a7be212)
 - A5: child-process test kills at every crash point and verifies recovery (commit bd0f7df)
 - A5: 1M-key recovery test (< 2 s) and benchmark (commit 8b6c9ec)
+- A5 merged to `main` (PR #5, merge 1bd0dbe)
+- A6: crash test case after_write/2 (kill after batch WriteAt, before Sync) for row B3 (commit b8ea7f9)
+- A6: crash tests pin the in-flight outcome: absent before/during WriteAt, present after fsync (commit 1e3362f)
+- A6: ARCHITECTURE.md: Mermaid component + recovery diagrams, byte layout, numbered write order, 32-row proof table, three guarantees (commit 4607f79)
 ## In progress
-- (none) A5 committed locally on `anirudh/A5-crashpoints-bench`, not pushed, no PR yet.
+- (none) A6 committed locally on `anirudh/A6-architecture`, not pushed, no PR yet.
 ## Next
-1. Push `anirudh/A5-crashpoints-bench`, open the A5 PR, merge.
-2. As integrator on `main`: update PROGRESS.md (A1-A4 merged; A5 status).
-3. Tell Likith the crash points are live for the `crashpoints` mode (names and env vars in SPEC section 8; where each one sits is below).
-4. A6: ARCHITECTURE.md (needs A4 and A5 merged).
+1. Push `anirudh/A6-architecture`, open the A6 PR, merge.
+2. As integrator on `main`: update PROGRESS.md (A1-A5 merged, A6 status). It still says nothing is merged.
+3. Tell Likith the crash points are live for the `crashpoints` mode, and that ARCHITECTURE.md Part 2 is ready to mirror into docs/SCENARIOS.md.
+4. Revisit ARCHITECTURE.md "Verified by" once torture modes run: replace "not verified yet" with mode + seed (A7, B6, D1-D3, F1, F2).
 ## Blockers / needs from others
-- (none)
+- Khushi (K4): `diagrams/architecture.png`, embedded at the top of ARCHITECTURE.md, does not exist yet. Until it lands the image link is broken; the Mermaid in ARCHITECTURE.md is complete on its own.
+- Likith (L1-L4): torture runs to fill "not verified yet" rows (A7 large-values, B6/D3 large-batch, D1/D2 random kills, F1 500 iterations, F2 recovery-crash).
 ## Decisions (and why)
 - Codec functions are exported: tests live in `tests/engine/` (package `engine_test`), which can only see exported names.
 - `MaxRecordPayload = MaxBatchPayload + 4 + MaxBatchOps*7`; `checkBatch` counts key + value bytes against `MaxBatchPayload`.
@@ -57,6 +62,9 @@ Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Curr
 - Validation runs inside the write lock, matching SPEC section 4 step 1 literally.
 - `ForEachSorted` holds the read lock while calling fn; fn must not call back into the DB.
 - New file SeqBase = 1, so the first record gets seq 1.
+- ARCHITECTURE.md cites file + function, never line numbers, so rows stay true when code moves.
+- Proof table says "not verified" wherever only a test without a kill, or no test, exists (C6, D2, D4, header-only F4). A wrong claim costs more than a missing one.
+- Known edge, not fixed: a header-only file (24 bytes) cut to 23 by hand fails Open with ErrNotNineLives (F4 row says so).
 ## Measurements
 - F3 recovery, 1M keys as 1M separate PUT records (11-byte keys, 100-byte values, 127 MB): open 376 ms on tmpfs, 416 ms on NVMe (`/home`). Warm page cache in both (file just written); cold cache not measured (needs root to drop caches). Benchmark: about 408 ms/op, 2.0M allocs/op.
 - 1M puts + 1M deletes as 10,000-op batches, then Compact: about 2 s total; file 23 MB after the puts, 24 bytes (header only) at the end.

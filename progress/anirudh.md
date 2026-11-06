@@ -1,7 +1,8 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 12:16 IST   Branch: (none yet)   Current PR: A1
+Last updated: 2026-11-06 12:30 IST   Branch: (none yet)   Current PR: A1
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
+- Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
 ## In progress
 - (none yet)
 ## Next

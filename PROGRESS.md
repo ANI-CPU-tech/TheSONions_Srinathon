@@ -3,8 +3,8 @@
 Owner: integrator (Anirudh). Edited only on `main`, after each merge. Personal detail lives in `progress/<name>.md`.
 
 - **Hackathon start:** 2026-11-06 11:20 IST. Deadline: 2026-11-07 11:20 IST.
-- **Last updated:** 2026-11-06 12:16 IST (hour 1).
-- **Current phase:** B0 bootstrap done. All three tracks may branch from `main` now.
+- **Last updated:** 2026-11-06 12:30 IST (hour 2).
+- **Current phase:** B0 bootstrap + project scaffold done (empty files per responsibility in every track). All three tracks may branch from `main` now.
 
 ## PR status
 

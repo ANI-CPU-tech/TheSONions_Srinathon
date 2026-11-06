@@ -36,13 +36,14 @@ func main() {
 		os.Exit(2)
 	}
 	signal.Notify(make(chan os.Signal, 1), os.Interrupt) // Ctrl-C stops the running command, not nlshell
-	fmt.Printf("NineLives test shell. Type / for commands, Tab to complete, Enter to run, Ctrl-D to quit.\nDemo database: %s\n", db)
 	saved, err := stty("-g")
-	if err != nil {
+	if err != nil { // stdin is not a terminal: plain text, no banner or colour codes
+		fmt.Printf("NineLives test shell. Type / for commands, Tab to complete, Enter to run, Ctrl-D to quit.\nDemo database: %s\n", db)
 		lineMode()
 		return
 	}
 	e := &editor{width: termWidth()}
+	fmt.Print(welcome(e.width, useColor()))
 	defer stty(saved)
 	for {
 		stty("raw", "-echo")

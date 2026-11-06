@@ -113,6 +113,9 @@ func TestLineModeRunsCommands(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, s)
 		}
 	}
+	if strings.Contains(s, "█") || strings.Contains(s, "\x1b[38;") {
+		t.Errorf("piped input must not get the banner or its colours:\n%s", s)
+	}
 	if strings.Count(s, "nl> /get a") != 1 {
 		t.Errorf("commands after /exit ran:\n%s", s)
 	}

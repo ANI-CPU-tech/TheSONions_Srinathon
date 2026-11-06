@@ -5,11 +5,12 @@ Last updated: 2026-11-06 15:04 IST   Branch: khushi   Current PR: K3 (all tasks 
 - K1: token codec + `open`/`put`/`get`/`del`/`batch`/`dump`/`check`/`compact`, `--max-bytes`, exit codes 0/1/2/3 (commit b4c3b48). Verified by unit tests + manual exit-code matrix; pushed on human request.
 - K2: serve protocol per SPEC section 12 (commit 3ee1191): READY, `[@writer:id]` prefixes, goroutine + buffered queue per writer, 4 MiB lines, contiguous batch blocks, stdout mutex, ACK only post-fsync, ERR codes, EOF → Close → exit 0. Verified T1–T10 incl. a 2 MiB line round-trip; found and fixed a partial-batch bug in `readBatchBlock` before commit. Pushed on human request (through 9ddd07d).
 - K3: `tests/cli/cli_test.go` integration suite + hardened `scripts/build.sh` (commit 76d642a). Covers every command, the whole exit-code table, token round-trips, dump byte order, batch failure paths, check CORRUPT, serve (READY, auto/explicit ids, batch blocks, whole-batch rejection, BADREQ/DISKFULL/TOOLARGE, 2 MiB line, two-writer FIFO, EOF exit 0) and `TestBuildScriptCleanClone` (working tree copied to temp, `sh scripts/build.sh` there, binary executed — proves the clean-clone build). 15 tests, `-count=5` run green, no flakes.
+- Error review on human request before K4: fresh uncached gofmt/vet/build/test all clean; `GOFLAGS=-race go test ./tests/cli/` (race-instrumented CLI included) passed with **zero data races** (58 s); all 15 tests + 7 subtests pass verbosely; 5 documented errors (1 real K2 batch bug, 3 test shadowing bugs, 1 cross-writer assertion, plus the K1 pre-commit flag-count issue) all reviewed, fixed and regression-covered.
+- K4: five diagrams, Mermaid source + exported PNG (commit e617ce9): `architecture` (every component + global RWMutex), `file-layout` (byte offsets, payloads, commit rule), `write-path` (numbered 1-7 + CRASH comments), `recovery` (SPEC 6 loop, idempotent truncate), `compaction` (temp/fsync/rename/dir-fsync/swap, E4, triggers). Rendered with `npx @mermaid-js/mermaid-cli` (human approved; one-time Chromium install at ~/.cache/puppeteer) and each PNG visually inspected for syntax errors and SPEC agreement. `diagrams/README.md` documents the re-export command and the Miro caveat.
 ## In progress
-- (none — paused after K3 for human review)
+- (none — paused after K4 for human review)
 ## Next
-1. K4: diagrams — `architecture`, `file-layout`, `write-path`, `recovery`, `compaction` `.mmd` sources + PNG export via `npx @mermaid-js/mermaid-cli` (human approved this tool).
-2. K5: full README (build, commands with real example output, tokens, serve, on-disk format with a real hex dump, recovery, B5 batch order, disk-full, torture quickstart, platform notes).
+1. K5: full README (build, commands with real example output, tokens, serve, on-disk format with a real hex dump, recovery, B5 batch order, disk-full, torture quickstart, platform notes).
 ## Blockers / needs from others
 - Anirudh: `engine.Compact()` still `ErrNotImplemented` (A4 pending) → CLI `compact` exits 1 (tested tolerantly: TestCompact accepts OK once A4 lands), serve `compact` op → `ERR … BADREQ`.
 - Likith: torture still a scaffold; serve + CLI ready to be driven.
@@ -23,6 +24,8 @@ Last updated: 2026-11-06 15:04 IST   Branch: khushi   Current PR: K3 (all tasks 
 - Tests assert only what SPEC guarantees: exact lines for single-writer sessions; for two writers, per-writer order + distinct seqs + final state (cross-writer ordering and exact seq values are races — TestServePrefixes/TwoWriters were rewritten after flaky assertions failed, which was a test bug, not a CLI bug).
 - `scripts/build.sh` does not force `GOPROXY=off`: with zero dependencies no network is contacted anyway, and forcing it would break a judge laptop whose Go is older than 1.27 (toolchain auto-download needs the proxy).
 - No `git push` / GitHub actions unless the human says so (K1 and K2 pushes were explicit exceptions).
+- Diagram PNGs exported with mermaid-cli `-b white`; source and PNG committed together, re-export command documented in diagrams/README.md.
+- Miro board (https://miro.com/app/board/uXjVERbFfok=/) could not be opened from this machine (needs a login session): diagram-vs-Miro sync is recorded as NOT VERIFIED, honestly; diagrams were instead checked against SPEC sections 3/4/6/7 line by line.
 ## Bugs found by torture
 - Not from torture (harness still a scaffold). Bugs found by own testing:
   1. K2 `readBatchBlock` returned valid ops + nil error when a line failed to parse → a malformed batch would have applied its valid subset (partial write). Fixed in 3ee1191 (return `firstErr` after the loop).

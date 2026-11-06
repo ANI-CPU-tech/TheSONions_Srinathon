@@ -209,9 +209,23 @@ func verify(state map[string]string, o *oracle, base map[string]string) error {
 					"key %q: value %q is not in allowed values %v", k, found, allowed)
 			}
 		} else {
+			// The key is absent in the dump. That is fine when lastAcked is
+			// absent, or when an in-flight op touching k has effect ABSENT
+			// (a delete, or a batch whose last op on k deletes it): such an
+			// in-flight op may or may not have been applied before the kill
+			// (SPEC rule 4). Otherwise the last ACKed value must be present.
 			if last.present {
-				return newFailure(k, "<absent>", allowed, opids,
-					"key %q: expected %q (last ACKed seq=%d), found absent", k, last.value, lastSeq(k, ackedByKey))
+				inflightAbsent := false
+				for _, ref := range inFlightByKey[k] {
+					if !ref.eff.present {
+						inflightAbsent = true
+						break
+					}
+				}
+				if !inflightAbsent {
+					return newFailure(k, "<absent>", allowed, opids,
+						"key %q: expected %q (last ACKed seq=%d), found absent", k, last.value, lastSeq(k, ackedByKey))
+				}
 			}
 		}
 	}

@@ -105,3 +105,24 @@ func TestVerifyBatchAtomicity(t *testing.T) {
 		t.Fatal("expected failure for partially applied batch")
 	}
 }
+
+// TestVerifyInFlightDeleteAbsent: an ACKed put followed by an in-flight delete
+// of the same key may leave the key absent (rule 4: the delete's ABSENT effect
+// is allowed).
+func TestVerifyInFlightDeleteAbsent(t *testing.T) {
+	v1 := tag(1, 100) + "aaa"
+	o := newOracle(
+		rec(1, 100, false, []op{putOp("k1", v1)}, acked, 1),
+		rec(2, 200, false, []op{delOp("k1")}, inFlight, 0),
+	)
+	state := map[string]string{} // k1 removed by in-flight delete
+	if err := verify(state, o, nil); err != nil {
+		t.Fatalf("in-flight delete of an ACKed key may leave it absent: %v", err)
+	}
+	// But if nothing in flight can remove k1, its absence is a failure.
+	o2 := newOracle(rec(1, 100, false, []op{putOp("k1", v1)}, acked, 1))
+	state = map[string]string{}
+	if err := verify(state, o2, nil); err == nil {
+		t.Fatal("expected failure: ACKed value absent with no remover in flight")
+	}
+}

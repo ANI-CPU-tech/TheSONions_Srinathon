@@ -36,8 +36,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "torture: --iterations must be at least 1")
 		os.Exit(2)
 	}
-	if c.mode != "default" {
-		fmt.Fprintf(os.Stderr, "torture: mode %q is not implemented yet (PRs L3, L4)\n", c.mode)
+	if !validMode(c.mode) {
+		fmt.Fprintf(os.Stderr, "torture: unknown mode %q\n", c.mode)
+		flag.Usage()
+		os.Exit(2)
+	}
+	if !implemented(c.mode) {
+		fmt.Fprintf(os.Stderr, "torture: mode %q is not wired up yet (PRs L3/L4, needs A4/A5 and K2)\n", c.mode)
 		os.Exit(2)
 	}
 	if err := run(c, os.Stdout); err != nil {

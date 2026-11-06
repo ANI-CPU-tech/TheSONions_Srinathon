@@ -11,7 +11,7 @@ import (
 
 // A seed must reproduce each writer's op stream exactly (SPEC rule 10).
 func TestGeneratorIsDeterministic(t *testing.T) {
-	a, b, other := newGenerator(42, 3, 1), newGenerator(42, 3, 1), newGenerator(42, 4, 1)
+	a, b, other := newGenerator(42, 3, 1, "default", 0), newGenerator(42, 3, 1, "default", 0), newGenerator(42, 4, 1, "default", 0)
 	same := true
 	for range 200 {
 		ra, rb, ro := a.next(), b.next(), other.next()
@@ -30,7 +30,7 @@ func TestOpIDsAreUnique(t *testing.T) {
 	seen := map[uint64]bool{}
 	for iter := 1; iter <= 3; iter++ {
 		for w := 1; w <= writers; w++ {
-			g := newGenerator(1, iter, w)
+			g := newGenerator(1, iter, w, "default", 0)
 			for range 1000 {
 				r := g.next()
 				if seen[r.opid] {

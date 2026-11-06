@@ -70,19 +70,24 @@ func (r request) text() string {
 }
 
 // generator makes one writer's op stream for one iteration. It depends only
-// on seed, iteration and writer id, never on timing (SPEC rule 10).
+// on seed, iteration and writer id, never on timing (SPEC rule 10). The mode
+// tweaks value sizes and batch sizes (PR L3).
 type generator struct {
-	rng    *rand.Rand
-	writer int
-	base   uint64 // op id of this writer's first op in this iteration
-	n      uint64 // ops made so far
+	rng     *rand.Rand
+	writer  int
+	base    uint64 // op id of this writer's first op in this iteration
+	n       uint64 // ops made so far
+	mode    string
+	maxByte int64
 }
 
-func newGenerator(seed int64, iter, writer int) *generator {
+func newGenerator(seed int64, iter, writer int, mode string, maxByte int64) *generator {
 	return &generator{
-		rng:    rand.New(rand.NewPCG(uint64(seed), uint64(iter)*16+uint64(writer))),
-		writer: writer,
-		base:   uint64(iter)*opidStride + uint64(writer-1),
+		rng:     rand.New(rand.NewPCG(uint64(seed), uint64(iter)*16+uint64(writer))),
+		writer:  writer,
+		base:    uint64(iter)*opidStride + uint64(writer-1),
+		mode:    mode,
+		maxByte: maxByte,
 	}
 }
 
@@ -99,7 +104,7 @@ func (g *generator) next() request {
 		r.ops = []op{g.del()}
 	default:
 		r.batch = true
-		r.ops = make([]op, 2+g.rng.IntN(maxBatch-1))
+		r.ops = make([]op, 2+g.rng.IntN(maxBatchOps(g.mode)-1))
 		for i := range r.ops {
 			if g.rng.IntN(4) == 0 {
 				r.ops[i] = g.del()
@@ -118,7 +123,7 @@ func (g *generator) del() op { return op{del: true, key: g.key()} }
 // put makes a value that starts with tag, so it traces back to one op.
 func (g *generator) put(tag string) op {
 	v := []byte(tag)
-	for range g.rng.IntN(maxFill + 1) {
+	for range g.rng.IntN(maxValueFill(g.mode) + 1) {
 		v = append(v, byte(g.rng.IntN(256)))
 	}
 	return op{key: g.key(), value: v}

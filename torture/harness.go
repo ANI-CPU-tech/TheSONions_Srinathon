@@ -43,10 +43,11 @@ func (c config) runDir() string { return filepath.Join(c.dir, strconv.FormatInt(
 func (c config) dbPath() string { return filepath.Join(c.runDir(), "db") }
 
 // cliArgs is the argument list for one ninelives command on our database.
-func (c config) cliArgs(cmd string) []string {
+// maxBytes is the effective cap after the mode's disk-full default is applied.
+func (c config) cliArgs(cmd string, maxBytes int64) []string {
 	args := []string{cmd, c.dbPath()}
-	if c.maxBytes > 0 {
-		args = append(args, "--max-bytes", strconv.FormatInt(c.maxBytes, 10))
+	if maxBytes > 0 {
+		args = append(args, "--max-bytes", strconv.FormatInt(maxBytes, 10))
 	}
 	return args
 }
@@ -88,7 +89,7 @@ func runAndKill(c config, o *oracle, iter int, delay time.Duration) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.runWriter(newGenerator(c.seed, iter, w))
+			s.runWriter(newGenerator(c.seed, iter, w, c.mode, diskFullBytes(c.mode, c.maxBytes)))
 		}()
 	}
 	time.Sleep(delay) // the writers are mid-stream: the kill lands during ops
@@ -117,7 +118,8 @@ func startServe(c config, o *oracle) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	args := c.cliArgs("serve")
+	maxBytes := diskFullBytes(c.mode, c.maxBytes)
+	args := c.cliArgs("serve", maxBytes)
 	if c.bug != "" {
 		// put --bug right after the binary, before the command, so Go's flag
 		// parsing in fakeserve sees it before the first positional argument.
@@ -342,7 +344,7 @@ func runCLI(c config, cmd string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
 	defer cancel()
 	var stdout, stderr strings.Builder
-	x := exec.CommandContext(ctx, c.bin, c.cliArgs(cmd)...)
+	x := exec.CommandContext(ctx, c.bin, c.cliArgs(cmd, diskFullBytes(c.mode, c.maxBytes))...)
 	x.Stdout, x.Stderr = &stdout, &stderr
 	if err := x.Run(); err != nil {
 		return stdout.String(), fmt.Errorf("%s: %v\nstdout: %s\nstderr: %s", cmd, err, stdout.String(), stderr.String())

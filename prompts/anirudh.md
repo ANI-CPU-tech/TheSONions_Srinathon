@@ -335,3 +335,13 @@ stat /home/anirudh/Desktop/NineLives/TheSONions_Srinathon/scripts/nlui: director
  
 
 how do i run the ui?
+
+### 2026-11-06 23:21 (local time) | Tool: Claude Code | Branch: anirudh/X2-ui
+<pasted text>
+  git pull origin main
+[git output: divergent branches, 48243d1..22783fc main -> origin/main, fatal: Need to specify how to reconcile divergent branches.]
+</pasted text>
+
+ 
+
+fix this

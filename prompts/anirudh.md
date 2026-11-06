@@ -16,3 +16,12 @@ I am Anirudh start my A1 task, as mentioned create a seperate branch and work, d
 
 ### 2026-11-06 12:38 (local time) | Tool: Claude Code | Branch: anirudh/A1-codec
 gimme the command the push the commits
+
+### 2026-11-06 12:39 (local time) | Tool: Claude Code | Branch: anirudh/A1-codec
+Gimme a desvription for the PR
+
+### 2026-11-06 12:42 (local time) | Tool: Claude Code | Branch: anirudh/A2-write-path
+start A2 on a new branch
+
+### 2026-11-06 12:44 (local time) | Tool: Claude Code | Branch: anirudh/A2-write-path
+continue

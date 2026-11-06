@@ -129,3 +129,90 @@ How do i test it now???
 [Image #2]
 
 Help me with the commands, what are the exact steps
+
+### 2026-11-06 17:18 (local time) | Tool: Claude Code | Branch: anirudh/X1-test-shell
+  go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
+NineLives test shell. Type / for commands, Tab to complete, Enter to run, Ctrl-D to quit.
+Demo database: /tmp/nl/demo.db
+nl> /build 
+$ scripts/build.sh && go build -o bin/fakeserve ./torture/fakeserve
+built bin/ninelives and bin/torture
+✓ done
+nl> /test 
+$ test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt: the files above need formatting"; exit 1; }; go vet ./... && go test ./...
+ok      ninelives/scripts/nlshell    0.213s
+ok      ninelives/src/cmd/ninelives    (cached)
+?       ninelives/src/engine    [no test files]
+ok      ninelives/tests/cli    0.595s
+ok      ninelives/tests/engine    (cached)
+ok      ninelives/torture    (cached)
+?       ninelives/torture/fakeserve    [no test files]
+✓ done
+nl> /test-crashpoints 
+$ go test ./tests/engine -run TestCrashPoints -v
+=== RUN   TestCrashPoints
+=== RUN   TestCrashPoints/before_write/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/mid_write/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/after_write/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/after_write/2
+    crashpoint_test.go:120: child acked 1 of 5 steps before the kill
+=== RUN   TestCrashPoints/after_fsync/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/after_fsync/3
+    crashpoint_test.go:120: child acked 2 of 5 steps before the kill
+=== RUN   TestCrashPoints/after_index/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/batch_mid_write/
+    crashpoint_test.go:120: child acked 1 of 5 steps before the kill
+=== RUN   TestCrashPoints/recovery_mid_scan/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/recovery_mid_scan/2
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/recovery_before_truncate/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/recovery_after_truncate/
+    crashpoint_test.go:120: child acked 0 of 5 steps before the kill
+=== RUN   TestCrashPoints/compact_mid_temp/
+    crashpoint_test.go:120: child acked 3 of 5 steps before the kill
+=== RUN   TestCrashPoints/compact_after_temp_fsync/
+    crashpoint_test.go:120: child acked 3 of 5 steps before the kill
+=== RUN   TestCrashPoints/compact_after_rename/
+    crashpoint_test.go:120: child acked 3 of 5 steps before the kill
+=== RUN   TestCrashPoints/compact_after_dir_fsync/
+    crashpoint_test.go:120: child acked 3 of 5 steps before the kill
+--- PASS: TestCrashPoints (0.04s)
+    --- PASS: TestCrashPoints/before_write/ (0.00s)
+    --- PASS: TestCrashPoints/mid_write/ (0.00s)
+    --- PASS: TestCrashPoints/after_write/ (0.00s)
+    --- PASS: TestCrashPoints/after_write/2 (0.00s)
+    --- PASS: TestCrashPoints/after_fsync/ (0.00s)
+    --- PASS: TestCrashPoints/after_fsync/3 (0.00s)
+    --- PASS: TestCrashPoints/after_index/ (0.00s)
+    --- PASS: TestCrashPoints/batch_mid_write/ (0.00s)
+    --- PASS: TestCrashPoints/recovery_mid_scan/ (0.00s)
+    --- PASS: TestCrashPoints/recovery_mid_scan/2 (0.00s)
+    --- PASS: TestCrashPoints/recovery_before_truncate/ (0.00s)
+    --- PASS: TestCrashPoints/recovery_after_truncate/ (0.00s)
+    --- PASS: TestCrashPoints/compact_mid_temp/ (0.00s)
+    --- PASS: TestCrashPoints/compact_after_temp_fsync/ (0.00s)
+    --- PASS: TestCrashPoints/compact_after_rename/ (0.00s)
+    --- PASS: TestCrashPoints/compact_after_dir_fsync/ (0.00s)
+=== RUN   TestCrashPointsUnarmed
+--- PASS: TestCrashPointsUnarmed (0.00s)
+PASS
+ok      ninelives/tests/engine    0.041s
+✓ done
+nl> /test-recovery-1m 
+$ go test ./tests/engine -run TestRecoveryMillionKeysUnder2s -v
+=== RUN   TestRecoveryMillionKeysUnder2s
+    recovery_bench_test.go:59: 1M keys, 127 MB file: open 371.867934ms (Stats.RecoveryTime 371.867526ms)
+--- PASS: TestRecoveryMillionKeysUnder2s (0.56s)
+PASS
+ok      ninelives/tests/engine    0.565s
+✓ done
+
+
+Cud u just explain me, what exact did these commands me in simple and easy to understand terms

@@ -319,3 +319,19 @@ Placement: Part of the judged demo
 
 ### 2026-11-06 23:15 (local time) | Tool: Claude Code | Branch: anirudh/X2-ui
 Gimme a desc for the PR keep it fairly human and simple.
+
+### 2026-11-06 23:21 (local time) | Tool: Claude Code | Branch: anirudh/X2-ui
+<pasted text>
+  go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
+NineLives test shell. Type / for commands, Tab to complete, Enter to run, Ctrl-D to quit.
+Demo database: /tmp/nl/demo.db
+nl> /exit 
+  go build -o bin/nlui ./scripts/nlui && ./bin/nlui
+stat /home/anirudh/Desktop/NineLives/TheSONions_Srinathon/scripts/nlui: directory not found
+󰪢 0s 󰉋 → .../TheSONions_Srinathon 󰜥 󰘬 main 
+   
+</pasted text>
+
+ 
+
+how do i run the ui?

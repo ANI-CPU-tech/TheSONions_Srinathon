@@ -1,5 +1,5 @@
 // Disk-full tests (PR A3): scenarios E1-E3 from docs/PROBLEM.md, the
-// DeleteReserve.
+// DeleteReserve, and the truncate-and-continue rule after a failed write.
 package engine_test
 
 import (
@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"ninelives/src/engine"
@@ -133,5 +134,44 @@ func TestDeletesUseReserve(t *testing.T) {
 	}
 	if n := fileSize(t, path); n > engine.FileHeaderSize+engine.DeleteReserve+room {
 		t.Fatalf("file is %d bytes, over max_bytes", n)
+	}
+}
+
+// A real write error halfway through a record: the process file-size limit
+// (RLIMIT_FSIZE) lets WriteAt write part of the record and then fail with
+// EFBIG. The engine must cut the partial bytes off, report ErrDiskFull and
+// stay usable, not poisoned.
+func TestFailedWriteIsTruncatedAndDBStaysUsable(t *testing.T) {
+	db, path := newDB(t)
+	db.Put([]byte("a"), []byte("1"))
+	before := fileSize(t, path)
+
+	var old syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_FSIZE, &old); err != nil {
+		t.Skip("no RLIMIT_FSIZE:", err)
+	}
+	limited := old
+	limited.Cur = uint64(before) + 10 // room for 10 bytes of the next record
+	if err := syscall.Setrlimit(syscall.RLIMIT_FSIZE, &limited); err != nil {
+		t.Skip("cannot set RLIMIT_FSIZE:", err)
+	}
+	_, err := db.Put([]byte("b"), bytes.Repeat([]byte("v"), 100))
+	if rerr := syscall.Setrlimit(syscall.RLIMIT_FSIZE, &old); rerr != nil {
+		t.Fatal(rerr)
+	}
+
+	if !errors.Is(err, engine.ErrDiskFull) || errors.Is(err, engine.ErrFailed) {
+		t.Fatalf("err = %v, want ErrDiskFull and not ErrFailed", err)
+	}
+	if got := fileSize(t, path); got != before {
+		t.Fatalf("file size = %d, want partial record cut back to %d", got, before)
+	}
+	if _, err := db.Put([]byte("c"), []byte("3")); err != nil {
+		t.Fatalf("DB should stay usable after a clean failure: %v", err)
+	}
+	db.Close()
+	wantState(t, mustOpen(t, path), map[string]string{"a": "1", "c": "3"})
+	if err := engine.Check(path); err != nil {
+		t.Fatalf("Check: %v", err)
 	}
 }

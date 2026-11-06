@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 12:56 IST   Branch: anirudh/A3-disk-full   Current PR: A3
+Last updated: 2026-11-06 13:07 IST   Branch: anirudh/A4-compaction   Current PR: A4
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -14,12 +14,17 @@ Last updated: 2026-11-06 12:56 IST   Branch: anirudh/A3-disk-full   Current PR: 
 - A3: max_bytes guard with DeleteReserve in `checkRoom` (commit 7b0fb87)
 - A3: failure rule in `fail`: truncate + fsync after a failed write, poison only if that fails; ENOSPC/EFBIG reported as ErrDiskFull (commit 05ee30c)
 - A3 tests in `tests/engine/diskfull_test.go`: E1, E2, E3, delete reserve, real partial write via RLIMIT_FSIZE. Green, also under -race.
+- A3 merged to `main` (PR #3, merge 3000dfd)
+- A4: crash-safe `Compact` (temp file, fsync, rename, swap, dir fsync), E4 abort (commit 91cf387)
+- A4: disk-full guard compacts once and rechecks, E5 (commit 9b3d149)
+- A4: auto-compaction trigger after writes; 1M puts + 1M deletes shrink to header only (commit bbb4264)
+- A4 tests in `tests/engine/compact_test.go` + E5 in `diskfull_test.go`. `go test ./...` and `-race -short` green.
 ## In progress
-- (none) A3 committed locally on `anirudh/A3-disk-full`, not pushed, no PR yet.
+- (none) A4 committed locally on `anirudh/A4-compaction`, not pushed, no PR yet.
 ## Next
-1. Push `anirudh/A3-disk-full`, open the A3 PR, merge.
-2. As integrator on `main`: update PROGRESS.md (A1, A2 merged; A3 status).
-3. A4: compaction (temp file, fsync, rename, dir fsync), auto-trigger, and the "compact once, recheck" retry in `checkRoom`; E4, E5 tests.
+1. Push `anirudh/A4-compaction`, open the A4 PR, merge.
+2. As integrator on `main`: update PROGRESS.md (A1-A3 merged; A4 status).
+3. A5: wire the 13 crash points in `crashpoint.go` (real SIGKILL, NINELIVES_CRASH_AT/AFTER) and the 1M-key recovery benchmark with individual puts.
 ## Blockers / needs from others
 - (none)
 ## Decisions (and why)
@@ -31,19 +36,27 @@ Last updated: 2026-11-06 12:56 IST   Branch: anirudh/A3-disk-full   Current PR: 
 - After a WriteAt/Sync error, `fail` truncates back to `db.size` and fsyncs, so the write never happened and the DB stays usable. Only if that fails does the DB enter `ErrFailed` until reopen (never append after unknown bytes).
 - Disk-full guard runs inside `commit`, after encoding, before WriteAt: encoding touches no disk, and the guard needs the exact record length.
 - ENOSPC and EFBIG from the OS map to `ErrDiskFull`, so a real full disk behaves like the max_bytes cap.
-- The compaction retry in the guard waits for A4 (needs compaction). Until then a full DB with dead bytes still returns `ErrDiskFull`; E5 is not met yet.
+- Guard: if a record does not fit and there are dead bytes, compact once and recheck (E5). DEL records are dead bytes, so deletes alone can never exhaust the reserve.
+- Compaction keeps the temp file's handle and makes it `db.f`, so nothing can fail between the rename and the handle swap. After the rename the DB always switches to the new file.
+- Directory fsync failure after the compaction rename sets the failed state: the rename may not be durable, so stop taking writes.
+- Compacted records keep each key's original seq; header SeqBase = nextSeq so seqs never go backwards even after trailing deletes are dropped.
+- E4: compacted file is checked against MaxBytes (no reserve) while writing; over it, abort with ErrDiskFull, remove the temp file, old file untouched. A put inside a batch costs 7 framing bytes but 23 as a standalone PUT, so compaction can grow a file of big batches.
+- Auto-compaction errors are dropped: the write that triggered it is already durable. No back-off yet (shortcut comment in `maybeCompact`).
 - Empty batch: writes nothing, returns seq 0. Delete of a missing key still writes a DEL record (each acked delete has its own seq).
 - Validation runs inside the write lock, matching SPEC section 4 step 1 literally.
 - `ForEachSorted` holds the read lock while calling fn; fn must not call back into the DB.
 - New file SeqBase = 1, so the first record gets seq 1.
 ## Measurements
+- 1M puts + 1M deletes as 10,000-op batches, then Compact: about 2 s total; file 23 MB after the puts, 24 bytes (header only) at the end.
 - Recovery, 1M keys (~11-byte keys, ~17-byte values, written as 100 batches of 10,000, file 35 MB): open = 359 ms on this laptop. Throwaway test, not committed; the real benchmark (individual puts) is A5.
 ## Bugs found by torture
 - (none yet)
 ## Notes for crash-here prep
 - `commit` (write.go): killed before WriteAt: nothing on disk, op absent (never acked). Killed during/after WriteAt, before Sync: record or a prefix is in the page cache; open() applies it if complete with a good CRC (in flight, allowed), else truncates it. Killed after Sync, before ACK: record durable, open() applies it (in flight, allowed).
 - `fail` (diskfull.go): killed before or after the Truncate: the file may end in a partial record past the last committed size. It was never acked; open() truncates it as a torn tail (or applies it if complete: allowed, it was in flight).
-- `checkRoom` (diskfull.go): no disk change. ErrDiskFull is returned before WriteAt, so nothing was written.
+- `writeCompactFile` (compact.go): killed while writing or before fsync of `<path>.compact`: old `<path>` untouched and authoritative; open() deletes the temp file (C3).
+- `compactLocked` (compact.go): killed before rename: same as above, even though the temp file is complete (C3). Killed after rename, before dir fsync: `<path>` is the new file, complete because it was fsynced before the rename (C4, C5). Rename is atomic, so exactly one of old/new is `<path>`.
+- `checkRoom` (diskfull.go): no disk change itself; it may run a compaction (see above). ErrDiskFull is returned before WriteAt, so nothing was written.
 - `truncateTail` (recover.go): killed before or after Truncate: next open() scans, stops at the same offset, truncates again (idempotent).
 - `createFile` (create.go): killed before rename: only `<path>.init`, open() deletes it and recreates. Killed after rename: `<path>` has a complete fsynced header.
 - `removeLeftovers` (recover.go): killed mid-remove: temp file still there or gone; next open() removes it again. Temp files are never authoritative.

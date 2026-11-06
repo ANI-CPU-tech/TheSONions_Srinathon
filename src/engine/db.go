@@ -82,9 +82,6 @@ func (db *DB) readValue(e entry) ([]byte, error) {
 	return v, nil
 }
 
-// Compact rewrites live keys into a new file and swaps it in. PR A4.
-func (db *DB) Compact() error { return ErrNotImplemented }
-
 // ForEachSorted calls fn for every live key in ascending byte order. It
 // holds the read lock throughout, so fn must not call back into db.
 func (db *DB) ForEachSorted(fn func(key, value []byte) error) error {
@@ -117,11 +114,15 @@ func (db *DB) Stats() Stats {
 	return Stats{
 		Keys:         len(db.idx.m),
 		FileBytes:    db.size,
-		DeadBytes:    db.size - FileHeaderSize - db.idx.live,
+		DeadBytes:    db.deadBytes(),
 		RecoveryTime: db.recoveryTime,
 		NextSeq:      db.nextSeq,
 	}
 }
+
+// deadBytes is the part of the records area no live key needs: old values,
+// deletes and batch framing. Compaction reclaims it. Caller holds the lock.
+func (db *DB) deadBytes() int64 { return db.size - FileHeaderSize - db.idx.live }
 
 // Close closes the file. Every acked write is already fsynced, so there is
 // nothing to flush. Later calls return ErrClosed.

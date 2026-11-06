@@ -109,6 +109,10 @@ func EncodeBatch(seq uint64, ops []Op) []byte {
 	return sealRecord(buf, RecBatch, seq)
 }
 
+// PutValueOffset is where the value starts inside a PUT record with a key
+// of keyLen bytes: header, key_len, key, val_len.
+func PutValueOffset(keyLen int) int { return RecordHeaderSize + 2 + keyLen + 4 }
+
 func appendKey(b, key []byte) []byte {
 	return append(le.AppendUint16(b, uint16(len(key))), key...)
 }

@@ -11,22 +11,34 @@ import (
 
 // checkRoom is the disk-full guard: the record must fit under MaxBytes.
 // Puts and batches must also leave DeleteReserve free, so deletes can still
-// be written when the file is full. MaxBytes 0 means unlimited. It runs
-// before WriteAt, so ErrDiskFull means nothing was written.
-// shortcut: no compaction retry yet; PR A4 adds "compact once, recheck"
-// when there are dead bytes.
+// be written when the file is full. If it does not fit and there are dead
+// bytes, compact once and check again (E5). MaxBytes 0 means unlimited. It
+// runs before WriteAt, so ErrDiskFull means this record was not written.
 func (db *DB) checkRoom(recLen int64, isDelete bool) error {
-	if db.opts.MaxBytes == 0 {
+	if db.fits(recLen, isDelete) {
 		return nil
+	}
+	if db.deadBytes() > 0 {
+		if err := db.compactLocked(); err != nil && db.failed {
+			return err
+		}
+		if db.fits(recLen, isDelete) {
+			return nil
+		}
+	}
+	return ErrDiskFull
+}
+
+// fits reports whether a record of recLen bytes fits under the cap now.
+func (db *DB) fits(recLen int64, isDelete bool) bool {
+	if db.opts.MaxBytes == 0 {
+		return true
 	}
 	limit := db.opts.MaxBytes
 	if !isDelete {
 		limit -= DeleteReserve
 	}
-	if db.size+recLen > limit {
-		return ErrDiskFull
-	}
-	return nil
+	return db.size+recLen <= limit
 }
 
 // fail handles an error from WriteAt or Sync. The file may now end in a

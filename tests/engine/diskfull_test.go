@@ -110,8 +110,7 @@ func TestE3ReopenAfterCapKeepsAckedData(t *testing.T) {
 	}
 }
 
-// When puts are refused, deletes still fit in DeleteReserve, until the
-// reserve itself runs out.
+// When puts are refused, deletes still fit in DeleteReserve.
 func TestDeletesUseReserve(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "reserve.db")
 	db := openCapped(t, path)
@@ -125,16 +124,18 @@ func TestDeletesUseReserve(t *testing.T) {
 	}
 	wantState(t, db, acked)
 
-	var err error
-	for i := 0; err == nil; i++ {
-		_, err = db.Delete([]byte(fmt.Sprintf("missing-%d", i)))
+	// Far more deletes than the reserve holds: DEL records are dead bytes,
+	// so when the reserve runs out the guard compacts them away and goes on.
+	// The file must never pass max_bytes.
+	for i := 0; i < 5000; i++ {
+		if _, err := db.Delete([]byte(fmt.Sprintf("missing-%d", i))); err != nil {
+			t.Fatalf("delete %d: %v", i, err)
+		}
+		if n := db.Stats().FileBytes; n > engine.FileHeaderSize+engine.DeleteReserve+room {
+			t.Fatalf("file is %d bytes, over max_bytes", n)
+		}
 	}
-	if !errors.Is(err, engine.ErrDiskFull) {
-		t.Fatalf("err = %v, want ErrDiskFull once the reserve is used", err)
-	}
-	if n := fileSize(t, path); n > engine.FileHeaderSize+engine.DeleteReserve+room {
-		t.Fatalf("file is %d bytes, over max_bytes", n)
-	}
+	wantState(t, db, acked)
 }
 
 // A real write error halfway through a record: the process file-size limit
@@ -173,5 +174,44 @@ func TestFailedWriteIsTruncatedAndDBStaysUsable(t *testing.T) {
 	wantState(t, mustOpen(t, path), map[string]string{"a": "1", "c": "3"})
 	if err := engine.Check(path); err != nil {
 		t.Fatalf("Check: %v", err)
+	}
+}
+
+// E5: the DB is full, the user deletes keys, and the next put works again
+// with no manual step: the guard compacts once and rechecks.
+func TestE5DeletesThenCompactionFreesSpace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "e5.db")
+	db := openCapped(t, path)
+	acked := fill(t, db)
+	for k := range acked {
+		if _, err := db.Delete([]byte(k)); err != nil {
+			t.Fatalf("delete: %v", err)
+		}
+	}
+	if _, err := db.Put([]byte("new"), val100); err != nil {
+		t.Fatalf("put after deleting everything: %v", err)
+	}
+	if n := fileSize(t, path); n >= engine.FileHeaderSize+room {
+		t.Fatalf("file is %d bytes; compaction should have shrunk it", n)
+	}
+	wantState(t, db, map[string]string{"new": string(val100)})
+	if err := engine.Check(path); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	db.Close()
+	wantState(t, openCapped(t, path), map[string]string{"new": string(val100)})
+}
+
+// When nothing is dead, compaction cannot help: still ErrDiskFull, and no
+// temp file is left behind.
+func TestFullWithNoDeadBytesStaysFull(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nodead.db")
+	db := openCapped(t, path)
+	fill(t, db)
+	if d := db.Stats().DeadBytes; d != 0 {
+		t.Fatalf("dead = %d, want 0", d)
+	}
+	if _, err := db.Put([]byte("x"), val100); !errors.Is(err, engine.ErrDiskFull) {
+		t.Fatalf("err = %v, want ErrDiskFull", err)
 	}
 }

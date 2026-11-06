@@ -87,6 +87,7 @@ func (db *DB) commit(rec []byte, isDelete bool) (uint64, error) {
 		return 0, db.fail(err)
 	}
 	db.size += int64(len(rec))
+	db.maybeCompact()
 	return h.Seq, nil
 }
 

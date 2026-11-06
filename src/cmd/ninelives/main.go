@@ -1,12 +1,8 @@
 // Command ninelives is the CLI for the NineLives database.
 // See docs/SPEC.md sections 10-12 for the output and serve contract.
-// Skeleton only: commands land in PRs K1 and K2.
 package main
 
-import (
-	"fmt"
-	"os"
-)
+import "os"
 
 const usage = `usage:
   ninelives open    <path> [--max-bytes N]
@@ -19,16 +15,14 @@ const usage = `usage:
   ninelives serve   <path>
   ninelives compact <path>`
 
-var commands = map[string]bool{
-	"open": true, "put": true, "get": true, "del": true, "batch": true,
-	"dump": true, "check": true, "serve": true, "compact": true,
+// commands maps each command name to its positional argument count. The
+// database path is argument 0 for every command; --max-bytes is a flag and
+// never counted (SPEC section 11).
+var commands = map[string]int{
+	"open": 1, "put": 3, "get": 2, "del": 2, "batch": 2,
+	"dump": 1, "check": 1, "serve": 1, "compact": 1,
 }
 
 func main() {
-	if len(os.Args) < 2 || !commands[os.Args[1]] {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2) // usage error
-	}
-	fmt.Fprintf(os.Stderr, "ninelives %s: not implemented\n", os.Args[1])
-	os.Exit(1)
+	os.Exit(run(os.Args[1:]))
 }

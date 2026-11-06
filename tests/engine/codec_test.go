@@ -179,3 +179,124 @@ func TestOversizedLengthRejected(t *testing.T) {
 		t.Fatalf("err = %v, want ErrTornRecord", err)
 	}
 }
+
+// collect decodes a record into the ops it holds, with values copied out
+// of the payload by offset, exactly as recovery locates them.
+func collect(t *testing.T, rec []byte) (engine.RecordHeader, []engine.Op) {
+	t.Helper()
+	h, payload, err := decode(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ops []engine.Op
+	err = engine.WalkPayload(h.Type, payload, func(kind engine.OpKind, key []byte, valOff, valLen int) error {
+		op := engine.Op{Kind: kind, Key: append([]byte(nil), key...)}
+		if kind == engine.OpPut {
+			op.Value = append([]byte{}, payload[valOff:valOff+valLen]...)
+		}
+		ops = append(ops, op)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h, ops
+}
+
+func sameOps(a, b []engine.Op) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Kind != b[i].Kind || !bytes.Equal(a[i].Key, b[i].Key) || !bytes.Equal(a[i].Value, b[i].Value) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestPutDelRoundTrip(t *testing.T) {
+	big := bytes.Repeat([]byte{0xAB}, engine.MaxValueSize)
+	key := bytes.Repeat([]byte("k"), engine.MaxKeySize)
+	for _, tc := range []struct {
+		rec  []byte
+		want engine.Op
+	}{
+		{engine.EncodePut(1, []byte("a"), []byte("1")), engine.Op{Kind: engine.OpPut, Key: []byte("a"), Value: []byte("1")}},
+		{engine.EncodePut(2, []byte("a"), nil), engine.Op{Kind: engine.OpPut, Key: []byte("a"), Value: []byte{}}},
+		{engine.EncodePut(3, key, big), engine.Op{Kind: engine.OpPut, Key: key, Value: big}},
+		{engine.EncodeDel(4, []byte("a")), engine.Op{Kind: engine.OpDel, Key: []byte("a")}},
+	} {
+		if _, ops := collect(t, tc.rec); !sameOps(ops, []engine.Op{tc.want}) {
+			t.Fatalf("decoded %d ops, want key %q", len(ops), tc.want.Key)
+		}
+	}
+}
+
+// Ops come back in listed order, so "put X; del X" ends with X deleted (B5).
+func TestBatchRoundTripKeepsOrder(t *testing.T) {
+	in := []engine.Op{
+		{Kind: engine.OpPut, Key: []byte("x"), Value: []byte("1")},
+		{Kind: engine.OpDel, Key: []byte("x")},
+		{Kind: engine.OpPut, Key: []byte("y"), Value: []byte{}},
+		{Kind: engine.OpPut, Key: []byte{0, 0xFF}, Value: []byte{0, 1, 2}},
+	}
+	h, ops := collect(t, engine.EncodeBatch(77, in))
+	if h.Type != engine.RecBatch || h.Seq != 77 {
+		t.Fatalf("header = %+v", h)
+	}
+	if !sameOps(ops, in) {
+		t.Fatalf("ops = %+v, want %+v", ops, in)
+	}
+}
+
+// seal builds a record with a valid CRC around an arbitrary payload, to
+// reach the payload checks that a real torn write never gets past.
+func seal(typ byte, payload []byte) []byte {
+	rec := make([]byte, engine.RecordHeaderSize, engine.RecordHeaderSize+len(payload))
+	binary.LittleEndian.PutUint32(rec[4:8], uint32(len(payload)))
+	rec[8] = typ
+	rec = append(rec, payload...)
+	binary.LittleEndian.PutUint32(rec[0:4], crc32.Checksum(rec[4:], castagnoli))
+	return rec
+}
+
+func TestMalformedPayloadIsCorruptAndAppliesNothing(t *testing.T) {
+	goodBatch := engine.EncodeBatch(1, []engine.Op{
+		{Kind: engine.OpPut, Key: []byte("a"), Value: []byte("1")},
+		{Kind: engine.OpPut, Key: []byte("b"), Value: []byte("2")},
+	})[engine.RecordHeaderSize:]
+
+	cases := map[string][]byte{
+		"unknown type":      seal(0x09, []byte{1, 0, 'k'}),
+		"put cut short":     seal(engine.RecPut, []byte{5, 0, 'k'}),
+		"del trailing byte": seal(engine.RecDel, []byte{1, 0, 'k', 0}),
+		"batch count high":  seal(engine.RecBatch, binary.LittleEndian.AppendUint32(nil, engine.MaxBatchOps+1)),
+		"batch bad op kind": seal(engine.RecBatch, []byte{1, 0, 0, 0, 0x07, 1, 0, 'k'}),
+		// first op is fine, second is cut: fn must not see the first one
+		"batch second op cut": seal(engine.RecBatch, goodBatch[:len(goodBatch)-1]),
+	}
+	for name, rec := range cases {
+		h, payload, err := decode(rec)
+		if err != nil {
+			t.Fatalf("%s: CRC should pass, got %v", name, err)
+		}
+		calls := 0
+		err = engine.WalkPayload(h.Type, payload, func(engine.OpKind, []byte, int, int) error {
+			calls++
+			return nil
+		})
+		if !errors.Is(err, engine.ErrCorrupt) || calls != 0 {
+			t.Errorf("%s: err = %v, calls = %d; want ErrCorrupt and 0 calls", name, err, calls)
+		}
+	}
+}
+
+func TestWalkPayloadReturnsCallbackError(t *testing.T) {
+	stop := errors.New("stop")
+	rec := engine.EncodeDel(1, []byte("k"))
+	h, payload, _ := decode(rec)
+	if err := engine.WalkPayload(h.Type, payload, func(engine.OpKind, []byte, int, int) error { return stop }); err != stop {
+		t.Fatalf("err = %v, want callback error", err)
+	}
+}

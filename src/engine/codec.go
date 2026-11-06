@@ -162,3 +162,104 @@ func VerifyRecord(h RecordHeader, payload []byte) error {
 	}
 	return nil
 }
+
+// OpFunc receives one decoded operation. key is a sub-slice of the payload
+// (copy it to keep it). For OpPut the value is payload[valOff:valOff+valLen];
+// for OpDel both are 0. Recovery stores offsets, never value copies.
+type OpFunc func(kind OpKind, key []byte, valOff, valLen int) error
+
+// WalkPayload calls fn for each operation of a CRC-verified record, in
+// listed order. It checks the whole payload first, so a malformed batch
+// calls fn zero times, never halfway. Malformed payloads wrap ErrCorrupt:
+// with a good CRC that means a writer bug, not a torn write.
+func WalkPayload(typ byte, payload []byte, fn OpFunc) error {
+	if err := walk(typ, payload, nil); err != nil {
+		return err
+	}
+	return walk(typ, payload, fn)
+}
+
+// walk decodes payload; fn == nil means validate only.
+func walk(typ byte, payload []byte, fn OpFunc) error {
+	r := &payloadReader{b: payload}
+	switch typ {
+	case RecPut, RecDel:
+		if err := walkOp(r, OpKind(typ), fn); err != nil {
+			return err
+		}
+	case RecBatch:
+		count := r.u32()
+		if count > MaxBatchOps {
+			return fmt.Errorf("%w: batch count %d over %d", ErrCorrupt, count, MaxBatchOps)
+		}
+		for i := uint32(0); i < count && !r.bad; i++ {
+			if err := walkOp(r, OpKind(r.u8()), fn); err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("%w: unknown record type 0x%02x", ErrCorrupt, typ)
+	}
+	if r.bad || r.off != len(payload) {
+		return fmt.Errorf("%w: payload length does not match its contents", ErrCorrupt)
+	}
+	return nil
+}
+
+// walkOp decodes one op body (key_len | key | [val_len | value]) and
+// passes it to fn when the bytes are all present.
+func walkOp(r *payloadReader, kind OpKind, fn OpFunc) error {
+	if kind != OpPut && kind != OpDel {
+		return fmt.Errorf("%w: unknown op kind 0x%02x", ErrCorrupt, byte(kind))
+	}
+	key := r.take(int(r.u16()))
+	valOff, valLen := 0, 0
+	if kind == OpPut {
+		valLen = int(r.u32())
+		valOff = r.off
+		r.take(valLen)
+	}
+	if r.bad || fn == nil {
+		return nil // walk reports r.bad once, after the loop
+	}
+	return fn(kind, key, valOff, valLen)
+}
+
+// payloadReader reads little-endian fields from a byte slice. Reading past
+// the end sets bad and returns zero values instead of panicking.
+type payloadReader struct {
+	b   []byte
+	off int
+	bad bool
+}
+
+func (r *payloadReader) take(n int) []byte {
+	if r.bad || n > len(r.b)-r.off {
+		r.bad = true
+		return nil
+	}
+	s := r.b[r.off : r.off+n]
+	r.off += n
+	return s
+}
+
+func (r *payloadReader) u8() byte {
+	if s := r.take(1); s != nil {
+		return s[0]
+	}
+	return 0
+}
+
+func (r *payloadReader) u16() uint16 {
+	if s := r.take(2); s != nil {
+		return le.Uint16(s)
+	}
+	return 0
+}
+
+func (r *payloadReader) u32() uint32 {
+	if s := r.take(4); s != nil {
+		return le.Uint32(s)
+	}
+	return 0
+}

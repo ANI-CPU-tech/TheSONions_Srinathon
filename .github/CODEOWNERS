@@ -1,0 +1,45 @@
+# Path ownership. Must match TaskSplit.md section 2.
+# Anirudh = @ANI-CPU-tech (engine + integrator).
+# Replace @KHUSHI_GH and @LIKITH_GH with real GitHub usernames.
+# Later rules override earlier ones.
+
+# Default: integrator
+*                        @ANI-CPU-tech
+
+# Integrator-owned and frozen
+/CLAUDE.md               @ANI-CPU-tech
+/TaskSplit.md            @ANI-CPU-tech
+/MASTER_PROMPT.md        @ANI-CPU-tech
+/PROGRESS.md             @ANI-CPU-tech
+/PROMPTS.md              @ANI-CPU-tech
+/prompts/planning-claude-ai.md @ANI-CPU-tech
+/docs/                   @ANI-CPU-tech
+/go.mod                  @ANI-CPU-tech
+/.gitignore              @ANI-CPU-tech
+/.github/                @ANI-CPU-tech
+
+# Anirudh: engine
+/src/engine/             @ANI-CPU-tech
+/tests/engine/           @ANI-CPU-tech
+/ARCHITECTURE.md         @ANI-CPU-tech
+/progress/anirudh.md     @ANI-CPU-tech
+/prompts/anirudh.md      @ANI-CPU-tech
+
+# Khushi: CLI, serve, docs
+/src/cmd/ninelives/      @KHUSHI_GH
+/tests/cli/              @KHUSHI_GH
+/README.md               @KHUSHI_GH
+/diagrams/               @KHUSHI_GH
+/scripts/build.sh        @KHUSHI_GH
+/progress/khushi.md      @KHUSHI_GH
+/prompts/khushi.md       @KHUSHI_GH
+
+# Likith: torture, attack docs
+/torture/                @LIKITH_GH
+/BREAKING.md             @LIKITH_GH
+/docs/SCENARIOS.md       @LIKITH_GH
+/progress/likith.md      @LIKITH_GH
+/prompts/likith.md       @LIKITH_GH
+
+# Frozen contract stays with the integrator even inside src/engine/
+/src/engine/api.go       @ANI-CPU-tech

@@ -51,6 +51,9 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /", http.FileServerFS(static))
 	mux.HandleFunc("GET /api/state", a.handleState)
 	mux.HandleFunc("GET /api/bytes", a.handleBytes)
+	mux.HandleFunc("GET /api/model", a.handleModel)
+	mux.HandleFunc("POST /api/run", a.handleRun)
+	mux.HandleFunc("POST /api/cancel", a.handleCancel)
 	return a.guard(mux)
 }
 
@@ -108,12 +111,57 @@ func (a *app) acquire() bool {
 func (a *app) release() { <-a.slot }
 
 // shutdown stops whatever runs, so its stream ends and the server can stop.
-func (a *app) shutdown() {
+func (a *app) shutdown() { a.cancelJob() }
+
+// cancelJob stops the running job, if any, and says whether there was one.
+func (a *app) cancelJob() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cancel != nil {
-		a.cancel()
+	if a.cancel == nil {
+		return false
 	}
+	a.cancel()
+	return true
+}
+
+func (a *app) setCancel(c context.CancelFunc) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cancel = c
+}
+
+// handleRun builds the requested job, takes the slot and streams the job
+// to the page. Closing the page (or /api/cancel) stops it.
+func (a *app) handleRun(w http.ResponseWriter, r *http.Request) {
+	var req runRequest
+	if err := readJSON(w, r, 8<<20, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	j, err := a.buildJob(req)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !a.acquire() {
+		writeErr(w, http.StatusConflict, "busy: another job or the serve session is running")
+		return
+	}
+	defer a.release()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	a.setCancel(cancel)
+	defer a.setCancel(nil)
+	a.runJob(ctx, j, newStream(w))
+}
+
+func (a *app) handleCancel(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"cancelled": a.cancelJob()})
+}
+
+// handleModel is what the page needs to draw its forms.
+func (a *app) handleModel(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"actions": actions, "modes": modes, "crashPoints": crashPoints})
 }
 
 // binInfo says whether one of our binaries is built, and when.

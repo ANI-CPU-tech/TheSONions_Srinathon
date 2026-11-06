@@ -83,13 +83,32 @@ Honest limitations, stated plainly:
 
 ## 4. What we tried that failed
 
-No abandoned designs yet. The torture tool has found no confirmed engine
-bugs in the fakeserve self-test (PR L2): `--bug=none` passes and every
-injected bug (`drop-ack`, `partial-batch`, `garbage`, `stale`) is caught.
-This section will be filled with seed, mode, symptom, root cause and fix
-commit once L3/L4 real-engine torture runs are possible; they are currently
-blocked on the working `ninelives serve` binary (Khushi K1/K2) and
-Anirudh's disk-full/compaction/crashpoints work (A3/A4/A5).
+- **Poison the DB on any failed write** (first A3 design): abandoned. A
+  short write from ENOSPC would have made the DB refuse all writes until a
+  restart. Now `fail` truncates back to the last committed size and fsyncs;
+  only if that fails does the DB stop writing (commit 05ee30c).
+- **Torture modes that passed without testing anything.** On the real
+  engine, `disk-full` showed `err=0` on every run: its 4 MiB cap was never
+  reached, because compaction kept 64 small keys far below it. `large-values`
+  used 64 KiB values and `large-batch` 100 ops, not the brief's 1 MB and
+  10,000. Fixed: 128 KiB cap (seed 2024 now gets 3,048 DISKFULL refusals in
+  100 iterations), values up to exactly 1 MiB, batches of exactly 10,000.
+- **Fixed recovery-kill delays** (0-20 ms) never landed: `open()` of our
+  files takes a few ms, so in the first trial none of the kills we looked at
+  (3 iterations) landed. Now the seed picks a fraction
+  of the last `open()`'s run time: 99 of 188 kills land in seed 42's run.
+- **Crash points that could never fire:** `recovery_*_truncate` armed with
+  `NINELIVES_CRASH_AFTER` 2-3, but an `open()` truncates at most once.
+- **Verifier false positive** (Likith, found by `large-batch` on
+  fakeserve): a key whose last ACKed op was a put, with a delete in flight,
+  was wrongly failed when absent. Rule 4 now allows the in-flight ABSENT.
+- **Serve applied part of a malformed batch** (Khushi, own tests, before
+  torture): `readBatchBlock` returned the valid ops of a batch with a bad
+  line. Fixed in 3ee1191: the whole batch is refused.
+- **Engine bugs found by torture: none so far.** Green on real disk:
+  `default` seed 12345 (500 iterations), `large-values` 999, `large-batch`
+  31337, `disk-full` 2024, `recovery-crash` 42, `compaction` 7 (100 each),
+  `crashpoints` 1306 (130: each of the 13 points 10 times, 91 fired).
 
 ## 5. If we had 24 more hours
 

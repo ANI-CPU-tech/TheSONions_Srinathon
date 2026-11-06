@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>NineLives Lab</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">9</span>
+    <div>
+      <h1>NineLives Lab</h1>
+      <p>the real command, the file it leaves, the path it takes</p>
+    </div>
+  </div>
+  <div class="dbinfo">
+    <span class="label">demo database</span>
+    <code id="dbpath">…</code>
+  </div>
+  <div id="bins" class="bins" aria-label="Built binaries"></div>
+  <div class="statusbox">
+    <span id="status" class="pill" role="status" aria-live="polite">idle</span>
+    <button id="stop" class="btn danger" type="button" hidden>Stop</button>
+  </div>
+  <button id="theme" class="btn ghost" type="button" title="Switch between light and dark">theme</button>
+</header>
+
+<div id="banner" class="banner" role="alert" hidden></div>
+
+<nav class="tabs" role="tablist" aria-label="Panels">
+  <button role="tab" type="button" id="tab-cli" aria-controls="p-cli" aria-selected="true" data-stage="db">CLI</button>
+  <button role="tab" type="button" id="tab-serve" aria-controls="p-serve" aria-selected="false" tabindex="-1" data-stage="db">Serve + kill</button>
+  <button role="tab" type="button" id="tab-crash" aria-controls="p-crash" aria-selected="false" tabindex="-1" data-stage="db">Crash lab</button>
+  <button role="tab" type="button" id="tab-torture" aria-controls="p-torture" aria-selected="false" tabindex="-1" data-stage="torture">Torture</button>
+  <button role="tab" type="button" id="tab-tests" aria-controls="p-tests" aria-selected="false" tabindex="-1" data-stage="tests">Build + tests</button>
+</nav>
+
+<main class="layout">
+  <section class="controls" aria-label="Controls">
+
+    <div id="p-cli" role="tabpanel" aria-labelledby="tab-cli" class="panel">
+      <p class="hint">Each button runs <code>./bin/ninelives</code> on the demo database, exactly as you would type it.</p>
+      <form class="group" id="f-put">
+        <h2>put</h2>
+        <div class="row">
+          <label class="field"><span>key</span><input name="key" value="a" autocomplete="off" spellcheck="false" required></label>
+          <label class="field"><span>value</span><input name="value" value="1" autocomplete="off" spellcheck="false" required></label>
+        </div>
+        <p class="hint">Raw text without spaces, or <code>x:&lt;hex&gt;</code> for bytes; <code>x:</code> is the empty value.</p>
+        <button class="btn primary" data-act="put">put</button>
+      </form>
+      <form class="group" id="f-key">
+        <h2>get / del</h2>
+        <label class="field"><span>key</span><input name="key" value="a" autocomplete="off" spellcheck="false" required></label>
+        <div class="row">
+          <button class="btn" data-act="get" value="get">get</button>
+          <button class="btn" data-act="del" value="del">del</button>
+        </div>
+      </form>
+      <form class="group" id="f-batch">
+        <h2>batch</h2>
+        <label class="field"><span>one op per line: <code>put k v</code> or <code>del k</code></span>
+          <textarea name="ops" rows="4" spellcheck="false">put c 3
+put d 4
+del c</textarea></label>
+        <button class="btn" data-act="batch">batch (one atomic record)</button>
+      </form>
+      <div class="group">
+        <h2>whole database</h2>
+        <div class="grid3">
+          <button class="btn" type="button" data-act="open">open</button>
+          <button class="btn" type="button" data-act="dump">dump</button>
+          <button class="btn" type="button" data-act="check">check</button>
+          <button class="btn" type="button" data-act="compact">compact</button>
+          <button class="btn" type="button" data-act="recover">recover</button>
+          <button class="btn" type="button" data-act="reset">reset</button>
+        </div>
+        <label class="field inline"><span>--max-bytes (0 = no cap)</span><input id="maxbytes" type="number" min="0" step="1" value="0" inputmode="numeric"></label>
+      </div>
+      <div class="group">
+        <h2>demos</h2>
+        <div class="row">
+          <button class="btn" type="button" data-act="cli-tour">CLI tour</button>
+          <button class="btn" type="button" data-act="disk-full">disk full (exit 3)</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="p-serve" role="tabpanel" aria-labelledby="tab-serve" class="panel" hidden>
+      <p class="hint">The judge's part: start <code>serve</code>, type requests, then kill it for real and recover.</p>
+      <div class="group">
+        <div class="row">
+          <button class="btn primary" type="button" id="serve-start" data-act="serve">start serve</button>
+          <button class="btn danger" type="button" id="serve-kill" disabled>SIGKILL</button>
+          <button class="btn" type="button" id="serve-eof" disabled>close stdin</button>
+        </div>
+        <label class="field inline"><span>--max-bytes (0 = no cap)</span><input id="serve-max" type="number" min="0" step="1" value="0" inputmode="numeric"></label>
+      </div>
+      <form class="group" id="f-serve">
+        <h2>request</h2>
+        <label class="field"><span>Enter sends, Shift+Enter adds a line (a batch block goes in one write)</span>
+          <textarea id="serve-line" rows="3" spellcheck="false" disabled>put a 1</textarea></label>
+        <div class="chips" id="serve-templates">
+          <button type="button" class="chip" data-tpl="put a 1">put</button>
+          <button type="button" class="chip" data-tpl="get a">get</button>
+          <button type="button" class="chip" data-tpl="del a">del</button>
+          <button type="button" class="chip" data-tpl="batch 2&#10;put b 2&#10;del a">batch 2</button>
+          <button type="button" class="chip" data-tpl="compact">compact</button>
+          <button type="button" class="chip" data-tpl="stats">stats</button>
+          <button type="button" class="chip" data-tpl="@1:500 put w1 hello">@1:500 prefix</button>
+        </div>
+        <button class="btn primary" id="serve-send" disabled>send</button>
+      </form>
+      <div class="group grow">
+        <h2>requests</h2>
+        <div class="tablewrap">
+          <table class="data" id="serve-reqs">
+            <thead><tr><th>op id</th><th>request</th><th>reply</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button class="btn" type="button" data-act="recover" id="serve-recover">recover (open, check, dump)</button>
+      </div>
+    </div>
+
+    <div id="p-crash" role="tabpanel" aria-labelledby="tab-crash" class="panel" hidden>
+      <p class="hint">Each scenario commits <code>base 0</code>, arms <code>NINELIVES_CRASH_AT</code> so the process SIGKILLs itself at that line, then recovers. It passes if the final <code>check</code> says OK and <code>base</code> survived.</p>
+      <div class="row">
+        <button class="btn primary" type="button" id="crash-all" data-act="crash-all">run all 14</button>
+      </div>
+      <div id="crash-list" class="crashlist"></div>
+    </div>
+
+    <div id="p-torture" role="tabpanel" aria-labelledby="tab-torture" class="panel" hidden>
+      <p class="hint"><code>./bin/torture</code> SIGKILLs serve at a random millisecond, recovers, and checks the dump against its own oracle of ACKs.</p>
+      <form class="group" id="f-torture">
+        <label class="field"><span>mode</span><select name="mode" id="t-mode"></select></label>
+        <div class="row">
+          <label class="field"><span>seed (empty = random)</span><input name="seed" inputmode="numeric" autocomplete="off" placeholder="random"></label>
+          <label class="field"><span>iterations</span><input name="iters" type="number" min="1" max="100000" value="100"></label>
+        </div>
+        <label class="field inline"><span>--max-bytes (0 = mode default)</span><input name="max" type="number" min="0" value="0"></label>
+        <button class="btn primary" data-act="torture">run torture</button>
+      </form>
+      <div class="group">
+        <h2>more</h2>
+        <div class="row">
+          <button class="btn" type="button" data-act="torture-all">every mode (about 5 min)</button>
+          <button class="btn" type="button" data-act="selftest">oracle self-test</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="p-tests" role="tabpanel" aria-labelledby="tab-tests" class="panel" hidden>
+      <p class="hint">The build and the Go test suites, with their real output.</p>
+      <div class="group">
+        <div class="grid2" id="tests-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div id="stage-db" class="stagegrid">
+      <article class="card" id="codepath" aria-labelledby="cp-title">
+        <header class="cardhead">
+          <h2 id="cp-title">Code path</h2>
+          <div class="cardtools">
+            <label class="mini"><span class="sr">animation speed</span>
+              <select id="speed">
+                <option value="380">slow</option>
+                <option value="110" selected>normal</option>
+                <option value="0">instant</option>
+              </select>
+            </label>
+            <button class="btn ghost" type="button" id="replay" disabled>replay</button>
+          </div>
+        </header>
+        <div class="steppick" id="steppick" role="listbox" aria-label="Steps of the last run"></div>
+        <p class="tracesum" id="tracesum">Run a command to see the path it takes.</p>
+        <div class="trace" id="trace"></div>
+        <p class="footnote">A model of the source, checked by tests against the code. Which steps ran is read from the exit code, the output and the file; it is not a live trace.</p>
+      </article>
+
+      <article class="card" id="disk" aria-labelledby="disk-title">
+        <header class="cardhead">
+          <h2 id="disk-title">Disk</h2>
+          <span class="muted" id="disk-when"></span>
+        </header>
+        <div class="disksum" id="disksum"></div>
+        <div class="filebar" id="filebar" aria-label="The file, byte for byte to scale"></div>
+        <div class="legend">
+          <span class="lg hdr">header</span><span class="lg put">PUT</span><span class="lg del">DEL</span><span class="lg batch">BATCH</span><span class="lg dead">dead</span><span class="lg torn">torn tail</span>
+        </div>
+        <p class="diff" id="diff"></p>
+        <div class="tablewrap records">
+          <table class="data" id="records">
+            <thead><tr><th>offset</th><th>bytes</th><th>type</th><th>seq</th><th>ops</th><th>state</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <section class="hex" id="hex" aria-label="Bytes of the selected record">
+          <h3 id="hex-title">Click a record to see its bytes</h3>
+          <div class="hexlegend" id="hexlegend"></div>
+          <div class="hexgrid" id="hexgrid"></div>
+        </section>
+        <h3>Index (in memory, rebuilt by every open)</h3>
+        <div class="tablewrap index">
+          <table class="data" id="index">
+            <thead><tr><th>key</th><th>value</th><th>seq</th><th>value at</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <div id="stage-torture" class="stagegrid single" hidden>
+      <article class="card" aria-labelledby="tt-title">
+        <header class="cardhead">
+          <h2 id="tt-title">Torture</h2>
+          <span class="muted" id="t-run"></span>
+        </header>
+        <div class="verdict" id="t-verdict">No run yet.</div>
+        <div class="progress" aria-hidden="true"><div class="bar" id="t-bar"></div></div>
+        <div class="tiles" id="t-tiles"></div>
+        <h3>One iteration</h3>
+        <ol class="cycle" id="t-cycle"></ol>
+        <div class="charts">
+          <figure><figcaption>acked ops per iteration</figcaption><svg id="t-acked" class="chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="acked ops per iteration"></svg></figure>
+          <figure><figcaption>kill delay after READY (ms)</figcaption><svg id="t-delay" class="chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="kill delay per iteration"></svg></figure>
+        </div>
+        <div class="tablewrap rows">
+          <table class="data" id="t-rows">
+            <thead><tr><th>iter</th><th>delay</th><th>sent</th><th>acked</th><th>err</th><th>in flight</th><th>keys</th><th>recovery</th><th>note</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <div id="stage-tests" class="stagegrid single" hidden>
+      <article class="card" aria-labelledby="job-title">
+        <header class="cardhead"><h2 id="job-title">Steps</h2><span class="muted" id="job-sum"></span></header>
+        <ol class="jobsteps" id="jobsteps"></ol>
+      </article>
+    </div>
+
+    <article class="card console" aria-labelledby="con-title">
+      <header class="cardhead">
+        <h2 id="con-title">Console</h2>
+        <div class="cardtools">
+          <span class="muted">click a <code>$</code> line to copy it</span>
+          <button class="btn ghost" type="button" id="con-clear">clear</button>
+        </div>
+      </header>
+      <div id="console" class="con" role="log" aria-live="polite" tabindex="0"></div>
+    </article>
+  </section>
+</main>
+</body>
+</html>

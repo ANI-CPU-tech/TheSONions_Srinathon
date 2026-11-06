@@ -222,3 +222,72 @@ can i merge this Branch into main (Just asking a question).
 
 ### 2026-11-06 17:23 (local time) | Tool: Claude Code | Branch: anirudh/X1-test-shell
 gimme a desc for the PR keep it fairly human and simple
+
+### 2026-11-06 21:37 (local time) | Tool: Claude Code | Branch: main
+<pasted text>
+nlshell is working: the menu in your screenshot is what it should look like. Below is the order to test everything. Type each line at the nl>  prompt and press Enter. Wait for ✓ done before the next one; a red ✗ means something failed.
+
+1. Build and the Go tests
+/build
+/test
+/test-crashpoints
+/test-recovery-1m
+
+2. CLI by hand
+/reset
+/put a 1
+/put b x:00ff
+/get a
+/get zz
+/del a
+/batch put c 3; put d 4; del c
+/dump
+/check
+/compact
+/disk-full
+- /get zz should print NOTFOUND.
+- /dump should print b x:00ff and d 4.
+- /check should print OK.
+- /disk-full should end with exit=3.
+
+3. Serve, then a real kill (the judge's part)
+/reset
+/serve
+nlshell switches to plain typing mode. Type these lines one at a time:
+put a 1
+batch 2
+put b 2
+del a
+get b
+!kill
+Then back at nl> :
+/recover
+Expected: ACK after each write, VAL 3 2 for get b, then serve ended: signal: killed. /recover should print OK and b 2.
+
+4. Crash points
+/crash after_fsync
+/crash mid_write
+/crash batch_mid_write
+/crash compact_after_rename
+/crash recovery_before_truncate
+/f4
+Type /crash  with the space, and the menu lists all 13 points. Each one should the final check should print OK.
+
+5. Torture
+/torture default 12345 500
+/torture compaction
+/torture recovery-crash
+/torture large-values 999 100
+/selftest
+Each run should end with PASS n/n. With no seed, it picks a new random one eacug runs must say FAILED and the last must say PASS 3/3.
+
+6. Optional, slower
+/torture-all
+/test-race
+/clean-clone
+/torture-all takes about 5 minutes.
+
+Ctrl-C stops a long run without leaving nlshell. Ctrl-D quits.
+</pasted text>
+
+Make a MD file where i can add all the test commands, for now add all these commands in that and commit and push it into the main branch, dont add urself as a contributor

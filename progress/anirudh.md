@@ -1,6 +1,7 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 17:45 IST   Branch: anirudh/X1-test-shell   Current PR: X1 (nlshell)
+Last updated: 2026-11-06 21:45 IST   Branch: main   Current PR: none (X1 merged as #10)
 ## Done
+- docs/TESTING.md: the hand-test commands in order (nlshell), with expected output; pushed to main (commit 28bbf8a)
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
 - A1 codec merged to `main` (PR #1, merge d4de803): header/record encode, torn + bad-CRC detection, `WalkPayload`

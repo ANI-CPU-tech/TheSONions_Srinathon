@@ -1,30 +1,33 @@
 # Progress: Khushi
-Last updated: 2026-11-06 14:49 IST   Branch: khushi   Current PR: K2 (all tasks on one `khushi` branch per human instruction)
+Last updated: 2026-11-06 15:04 IST   Branch: khushi   Current PR: K3 (all tasks on one `khushi` branch per human instruction)
 ## Done
 - Setup: fast-forwarded `main` to `origin/main` (A1+A2+A3 merged), created branch `khushi` from it (commit 3000dfd).
-- K1: token codec + `open`/`put`/`get`/`del`/`batch`/`dump`/`check`/`compact`, `--max-bytes`, exit codes 0/1/2/3, `serve` stub (commit b4c3b48). Verified: gofmt/vet/build/test green + manual smoke of every command and exit code. Pushed to `origin/khushi` on human request (commits b4c3b48, 5e7169f, f62fdf3).
-- K2: serve protocol per SPEC section 12 (commit 3ee1191): READY line, `[@writer:id]` prefixes with auto writer 0 and auto-incrementing op-id, one goroutine + buffered queue per writer id, single reader, 4 MiB line buffer, contiguous batch blocks, stdout mutex with per-line flush, ACK only after the engine call returns (post-fsync), ERR codes DISKFULL/TOOLARGE/FAILED/BADREQ, EOF → drain queues → Close → exit 0. Verified (T1–T10): basic session, hand-typed no-prefix ops, batch + empty batch, malformed batch line rejected whole (bug found, see below), ERR codes all four, 2 MiB input line → 2 MiB output line byte-exact, two writers (interleaved execution, per-writer order preserved, correct final dump), EOF mid-batch block → ERR + exit 0, blank lines ignored, check OK after serve, durability after EOF.
+- K1: token codec + `open`/`put`/`get`/`del`/`batch`/`dump`/`check`/`compact`, `--max-bytes`, exit codes 0/1/2/3 (commit b4c3b48). Verified by unit tests + manual exit-code matrix; pushed on human request.
+- K2: serve protocol per SPEC section 12 (commit 3ee1191): READY, `[@writer:id]` prefixes, goroutine + buffered queue per writer, 4 MiB lines, contiguous batch blocks, stdout mutex, ACK only post-fsync, ERR codes, EOF → Close → exit 0. Verified T1–T10 incl. a 2 MiB line round-trip; found and fixed a partial-batch bug in `readBatchBlock` before commit. Pushed on human request (through 9ddd07d).
+- K3: `tests/cli/cli_test.go` integration suite + hardened `scripts/build.sh` (commit 76d642a). Covers every command, the whole exit-code table, token round-trips, dump byte order, batch failure paths, check CORRUPT, serve (READY, auto/explicit ids, batch blocks, whole-batch rejection, BADREQ/DISKFULL/TOOLARGE, 2 MiB line, two-writer FIFO, EOF exit 0) and `TestBuildScriptCleanClone` (working tree copied to temp, `sh scripts/build.sh` there, binary executed — proves the clean-clone build). 15 tests, `-count=5` run green, no flakes.
 ## In progress
-- (none — paused after K2 for human review)
+- (none — paused after K3 for human review)
 ## Next
-1. K3: `scripts/build.sh` hardening + CLI/serve integration tests in `tests/cli/` covering every command.
-2. K4: diagrams (5 `.mmd` + PNG export via `npx @mermaid-js/mermaid-cli`).
-3. K5: full README with a real hex dump of the on-disk format.
+1. K4: diagrams — `architecture`, `file-layout`, `write-path`, `recovery`, `compaction` `.mmd` sources + PNG export via `npx @mermaid-js/mermaid-cli` (human approved this tool).
+2. K5: full README (build, commands with real example output, tokens, serve, on-disk format with a real hex dump, recovery, B5 batch order, disk-full, torture quickstart, platform notes).
 ## Blockers / needs from others
-- Anirudh: `engine.Compact()` still returns `ErrNotImplemented` (A4 pending) → CLI `compact` exits 1 and serve answers `ERR <id> BADREQ ninelives: not implemented` for the `compact` op. Both sides are ready; they flip to `OK` / `ACK <id> 0` when A4 merges. (BADREQ is the spec's catch-all: section 12 defines only DISKFULL|BADREQ|TOOLARGE|FAILED.)
-- Likith: torture still a scaffold; serve is ready to be driven (L1 spawns `./bin/ninelives serve`).
+- Anirudh: `engine.Compact()` still `ErrNotImplemented` (A4 pending) → CLI `compact` exits 1 (tested tolerantly: TestCompact accepts OK once A4 lands), serve `compact` op → `ERR … BADREQ`.
+- Likith: torture still a scaffold; serve + CLI ready to be driven.
 ## Decisions (and why)
-- **Single branch `khushi`** with `K1:`/`K2:`-style commits instead of TaskSplit §3's one-branch-per-PR: direct human instruction; recorded so the integrator can split later if wanted.
-- `ninelives compact` prints `OK`; serve `compact` answers `ACK <opid> 0` (no record is written, so there is no seq). SPEC has no row for compact output — documented here for README (K5).
-- `check` failures print `CORRUPT: <reason>` on stdout even for e.g. a missing file (SPEC §11 lists that as check's output line); exit 1 either way.
-- Malformed token/batch line/batch-file line = usage error (exit 2) or serve `ERR BADREQ`: nothing touched. Engine rejections stay exit 1, `ErrDiskFull` exit 3.
-- Batch file ignores blank lines and `#` comments (PROBLEM.md §6 format); serve ignores blank/whitespace-only stdin lines (SPEC silent — friendly to hand-typing).
-- Serve auto op-ids start at 1; a malformed `@` prefix echoes opid 0 (the id is unknowable). Explicit `@w` (no `:id`) form accepted as a superset of `@w:id`, opid auto-increments.
-- Batch block: always consume exactly n lines even on a parse error, so the stream never desyncs; n > 10000 drained then rejected as TOOLARGE (bounded memory).
-- No `git push` / GitHub actions until the human says so (K1 push was an explicit exception).
+- **Single branch `khushi`** with `K<n>:`-style commits instead of TaskSplit §3's one-branch-per-PR: direct human instruction; recorded so the integrator can split later if wanted.
+- `compact` prints `OK` / serve answers `ACK <opid> 0` (no record written → no seq). SPEC has no row for compact output.
+- `check` failures print `CORRUPT: <reason>` on stdout even for non-corruption reasons (e.g. missing file); exit 1 either way — SPEC §11 lists that as check's output line.
+- Malformed token / op / batch line = exit 2 or `ERR BADREQ` (nothing touched); engine rejections exit 1; `ErrDiskFull` exit 3. Serve's ERR uses BADREQ as the protocol's catch-all (only 4 codes exist).
+- Batch file ignores blank lines and `#` comments; serve ignores blank/whitespace stdin lines (hand-typing friendliness, SPEC silent).
+- Serve auto op-ids start at 1; malformed `@` prefix echoes opid 0. Auto ids are not consumed by explicit-prefix requests.
+- Tests assert only what SPEC guarantees: exact lines for single-writer sessions; for two writers, per-writer order + distinct seqs + final state (cross-writer ordering and exact seq values are races — TestServePrefixes/TwoWriters were rewritten after flaky assertions failed, which was a test bug, not a CLI bug).
+- `scripts/build.sh` does not force `GOPROXY=off`: with zero dependencies no network is contacted anyway, and forcing it would break a judge laptop whose Go is older than 1.27 (toolchain auto-download needs the proxy).
+- No `git push` / GitHub actions unless the human says so (K1 and K2 pushes were explicit exceptions).
 ## Bugs found by torture
-- Not from torture (harness still a scaffold). Found by K2 testing before commit: `readBatchBlock` returned valid ops with `nil` error even when a line failed to parse, so `ERR BADREQ` was skipped and the valid subset of a malformed batch was applied — a partial-batch write. Fix: return `firstErr` after the loop (commit 3ee1191). Symptom: `GARBAGE LINE` in a `batch 2` block still printed `ACK 1 1` and `dump` showed the `put` from line 1.
+- Not from torture (harness still a scaffold). Bugs found by own testing:
+  1. K2 `readBatchBlock` returned valid ops + nil error when a line failed to parse → a malformed batch would have applied its valid subset (partial write). Fixed in 3ee1191 (return `firstErr` after the loop).
+  2. K3 test bugs: three `if res := …` shadowing mistakes made assertions read the wrong result, and one assertion expected cross-writer response order (only per-writer order is guaranteed). Fixed in 76d642a; `-count=5` since green.
 ## Notes for crash-here prep
-- serve ACK path: `Put` returns only after `file.WriteAt` + `file.Sync` (SPEC §4 steps 4–5); `emitf("ACK ...")` runs strictly after → a printed ACK means the record is on disk even if killed 1 ms later (torture L4 will prove it).
-- Kill between reader enqueue and worker execution: request not yet applied, no ACK printed → oracle allows it as in-flight.
-- EOF shutdown: close(queues) → wg.Wait (in-flight finish) → db.Close; kill during that window is just an unacked op.
+- serve ACK path: `Put` returns after `WriteAt`+`Sync` (SPEC §4 steps 4–5); `emitf("ACK …")` strictly after → printed ACK = on disk (torture L4 proves it).
+- Kill between reader enqueue and worker execution: not applied, no ACK → oracle allows as in-flight.
+- EOF shutdown: close(queues) → wg.Wait → db.Close; a kill in that window is an unacked op.

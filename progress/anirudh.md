@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 22:52 IST   Branch: anirudh/X2-ui   Current PR: X2 (not opened yet)
+Last updated: 2026-11-06 22:55 IST   Branch: anirudh/X2-ui   Current PR: X2 (not opened yet)
 ## Done
 - docs/TESTING.md: the hand-test commands in order (nlshell), with expected output; pushed to main (commit 28bbf8a)
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
@@ -35,7 +35,7 @@ Last updated: 2026-11-06 22:52 IST   Branch: anirudh/X2-ui   Current PR: X2 (not
 - Integration on local `main` (not pushed): PR #9 synced, B1 `scripts/merge-prompts.sh` + PROMPTS.md (54 prompts), PROGRESS.md rewritten, fresh-clone deadline checklist, judge-style torture on new seeds all PASS (bd37135..a4ff291).
 - X1: `scripts/nlshell` interactive test menu (b13d7ef, tests ef85496). Checked on a real pty via `script`: suggestions, Tab, arrows, /crash, /serve + !kill, /recover.
 ## In progress
-- X2 NineLives Lab (`scripts/nlui`, plan approved 22:35): guarded loopback server, read-only DB decoder (engine codec, cross-checked against engine Stats), argv-only job runner (own process group, SIGINT then SIGKILL on cancel), the command catalogue + /api/run (all 13 crash points and F4 pass end to end in the tests) and the code-path model + evidence-based trace (tests check every named function and crash point against the source) done. Next: serve session, torture parser, web UI, docs/TESTING.md section.
+- X2 NineLives Lab (`scripts/nlui`, plan approved 22:35): guarded loopback server, read-only DB decoder (engine codec, cross-checked against engine Stats), argv-only job runner (own process group, SIGINT then SIGKILL on cancel), the command catalogue + /api/run (all 13 crash points and F4 pass end to end in the tests), the code-path model + evidence-based trace (tests check every named function and crash point against the source) and the interactive serve session (SIGKILL, stdin EOF; op ids tracked with serve's own rules, checked against the real serve) done. Next: torture parser, web UI, docs/TESTING.md section.
 ## Next
 1. Push `main` (7 commits ahead), then `anirudh/X1-test-shell`, PR, merge.
 2. Before the deadline: `sh scripts/merge-prompts.sh`, commit, push.

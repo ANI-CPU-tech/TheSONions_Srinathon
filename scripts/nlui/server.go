@@ -34,6 +34,7 @@ type app struct {
 
 	mu     sync.Mutex
 	cancel context.CancelFunc // stops the running job; nil when none runs
+	serve  *serveSession      // the running serve; nil when none runs
 }
 
 func newApp(root, dir, token string, port int) *app {
@@ -54,6 +55,9 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/model", a.handleModel)
 	mux.HandleFunc("POST /api/run", a.handleRun)
 	mux.HandleFunc("POST /api/cancel", a.handleCancel)
+	mux.HandleFunc("POST /api/serve/start", a.handleServeStart)
+	mux.HandleFunc("POST /api/serve/send", a.handleServeSend)
+	mux.HandleFunc("POST /api/serve/{how}", a.handleServeSignal)
 	return a.guard(mux)
 }
 
@@ -110,8 +114,14 @@ func (a *app) acquire() bool {
 
 func (a *app) release() { <-a.slot }
 
-// shutdown stops whatever runs, so its stream ends and the server can stop.
-func (a *app) shutdown() { a.cancelJob() }
+// shutdown stops whatever runs, so its stream ends and the server can
+// stop: the job is cancelled, serve gets stdin EOF (a clean exit).
+func (a *app) shutdown() {
+	a.cancelJob()
+	if ss := a.getServe(); ss != nil {
+		ss.closeStdin()
+	}
+}
 
 // cancelJob stops the running job, if any, and says whether there was one.
 func (a *app) cancelJob() bool {

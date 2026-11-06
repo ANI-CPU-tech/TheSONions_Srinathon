@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 
 	"ninelives/src/engine"
 )
@@ -131,10 +130,7 @@ func takeSnapshot(path string) *snapshot {
 		s.Error = err.Error()
 		return s
 	}
-	s.Exists, s.Size = true, fi.Size()
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		s.Inode = uint64(st.Ino)
-	}
+	s.Exists, s.Size, s.Inode = true, fi.Size(), inodeOf(fi)
 	b := make([]byte, min(s.Size, maxViewBytes))
 	n, err := io.ReadFull(f, b)
 	if errors.Is(err, io.ErrUnexpectedEOF) { // shrank since Stat (a writer truncated it)

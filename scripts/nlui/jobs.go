@@ -53,18 +53,20 @@ type job struct {
 
 // event is one NDJSON line of a job's stream.
 type event struct {
-	Type     string     `json:"type"` // job, step, out, exit, snapshot, trace, torture, done
-	Step     int        `json:"step,omitempty"`
-	Count    int        `json:"count,omitempty"`
-	Title    string     `json:"title,omitempty"`
-	Cmd      string     `json:"cmd,omitempty"`
-	Stream   string     `json:"stream,omitempty"`
-	Text     string     `json:"text,omitempty"`
-	OK       bool       `json:"ok,omitempty"`
-	Exit     *exitInfo  `json:"exit,omitempty"`
-	Snapshot *snapshot  `json:"snapshot,omitempty"`
-	Diff     *diffView  `json:"diff,omitempty"`
-	Trace    *traceView `json:"trace,omitempty"`
+	Type     string      `json:"type"` // job, step, out, exit, snapshot, trace, torture, done
+	Step     int         `json:"step,omitempty"`
+	Count    int         `json:"count,omitempty"`
+	Title    string      `json:"title,omitempty"`
+	Cmd      string      `json:"cmd,omitempty"`
+	Stream   string      `json:"stream,omitempty"`
+	Text     string      `json:"text,omitempty"`
+	OK       bool        `json:"ok,omitempty"`
+	Exit     *exitInfo   `json:"exit,omitempty"`
+	Snapshot *snapshot   `json:"snapshot,omitempty"`
+	Diff     *diffView   `json:"diff,omitempty"`
+	Trace    *traceView  `json:"trace,omitempty"`
+	Req      *serveReq   `json:"req,omitempty"`
+	Reqs     []*serveReq `json:"reqs,omitempty"`
 }
 
 // exitInfo is how one step ended.

@@ -161,7 +161,7 @@ func (a *app) handleCancel(w http.ResponseWriter, r *http.Request) {
 
 // handleModel is what the page needs to draw its forms.
 func (a *app) handleModel(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"actions": actions, "modes": modes, "crashPoints": crashPoints})
+	writeJSON(w, http.StatusOK, map[string]any{"actions": actions, "modes": modes, "crashPoints": crashPoints, "paths": paths})
 }
 
 // binInfo says whether one of our binaries is built, and when.

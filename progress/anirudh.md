@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 22:48 IST   Branch: anirudh/X2-ui   Current PR: X2 (not opened yet)
+Last updated: 2026-11-06 22:52 IST   Branch: anirudh/X2-ui   Current PR: X2 (not opened yet)
 ## Done
 - docs/TESTING.md: the hand-test commands in order (nlshell), with expected output; pushed to main (commit 28bbf8a)
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
@@ -35,7 +35,7 @@ Last updated: 2026-11-06 22:48 IST   Branch: anirudh/X2-ui   Current PR: X2 (not
 - Integration on local `main` (not pushed): PR #9 synced, B1 `scripts/merge-prompts.sh` + PROMPTS.md (54 prompts), PROGRESS.md rewritten, fresh-clone deadline checklist, judge-style torture on new seeds all PASS (bd37135..a4ff291).
 - X1: `scripts/nlshell` interactive test menu (b13d7ef, tests ef85496). Checked on a real pty via `script`: suggestions, Tab, arrows, /crash, /serve + !kill, /recover.
 ## In progress
-- X2 NineLives Lab (`scripts/nlui`, plan approved 22:35): guarded loopback server, read-only DB decoder (engine codec, cross-checked against engine Stats), argv-only job runner (own process group, SIGINT then SIGKILL on cancel) and the command catalogue + /api/run (all 13 crash points and F4 pass end to end in the tests) done. Next: code-path trace, serve session, torture parser, web UI, docs/TESTING.md section.
+- X2 NineLives Lab (`scripts/nlui`, plan approved 22:35): guarded loopback server, read-only DB decoder (engine codec, cross-checked against engine Stats), argv-only job runner (own process group, SIGINT then SIGKILL on cancel), the command catalogue + /api/run (all 13 crash points and F4 pass end to end in the tests) and the code-path model + evidence-based trace (tests check every named function and crash point against the source) done. Next: serve session, torture parser, web UI, docs/TESTING.md section.
 ## Next
 1. Push `main` (7 commits ahead), then `anirudh/X1-test-shell`, PR, merge.
 2. Before the deadline: `sh scripts/merge-prompts.sh`, commit, push.
@@ -45,6 +45,7 @@ Last updated: 2026-11-06 22:48 IST   Branch: anirudh/X2-ui   Current PR: X2 (not
 - Khushi (K4): `diagrams/architecture.png`, embedded at the top of ARCHITECTURE.md, does not exist yet. Until it lands the image link is broken; the Mermaid in ARCHITECTURE.md is complete on its own.
 - Team: TaskSplit.md still lists Likith as owner of `torture/**`, BREAKING.md, docs/SCENARIOS.md. TaskSplit.md is frozen; the ownership change needs a `contract/*` PR approved by all three.
 ## Decisions (and why)
+- nlui's Code path panel is a hand-written model of the source (trace.go), not a live trace: the engine has no tracing hooks and adding them now would touch the judged write path. The UI says so. Tests check that every function and crash point it names exists, and that each crash point is called inside the function it names. Which steps a run reached comes only from evidence: exit code, armed crash point, output, file before and after.
 - nlui (X2) is Go stdlib `net/http` + `embed`, bound to 127.0.0.1 only (no address flag), opened in a Chromium `--app` window. Chosen over Electron: no npm download, no `require`, builds offline. Every /api call needs a per-launch random token; Host and Origin are checked (DNS rebinding, cross-site posts).
 - nlshell lives in `scripts/` (integrator-owned, not part of the database) and uses `stty` for raw mode: x/term would break the stdlib-only rule.
 - nlshell prints every shell command it runs: the demo is without tools, so it must teach the commands, not hide them.

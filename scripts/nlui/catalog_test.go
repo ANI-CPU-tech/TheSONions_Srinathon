@@ -100,6 +100,15 @@ func TestCrashPointsMatchEngine(t *testing.T) {
 	}
 }
 
+func lastSnapshot(evs []event) *snapshot {
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].Snapshot != nil {
+			return evs[i].Snapshot
+		}
+	}
+	return nil
+}
+
 // needBinary skips a test that runs the real CLI when it is not built.
 func needBinary(t *testing.T) {
 	t.Helper()
@@ -140,9 +149,8 @@ func TestCLIActionsForReal(t *testing.T) {
 		}
 	}
 	evs, _ := runAction(t, a, "dump")
-	last := evs[len(evs)-2] // the snapshot after the step, before done
-	if last.Snapshot == nil || last.Snapshot.Keys != 1 || len(last.Snapshot.Records) != 1 {
-		t.Errorf("snapshot after compaction: %+v", last.Snapshot)
+	if s := lastSnapshot(evs); s == nil || s.Keys != 1 || len(s.Records) != 1 {
+		t.Errorf("snapshot after compaction: %+v", s)
 	}
 }
 

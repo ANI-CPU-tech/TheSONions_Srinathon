@@ -13,3 +13,6 @@ Before i start my part of taskSplit.md part cud u make a rough scaffold of the p
 
 ### 2026-11-06 12:33 (local time) | Tool: Claude Code | Branch: anirudh/A1-codec
 I am Anirudh start my A1 task, as mentioned create a seperate branch and work, dont add urself as a contributor. Commit all the changes but dont push it.
+
+### 2026-11-06 12:38 (local time) | Tool: Claude Code | Branch: anirudh/A1-codec
+gimme the command the push the commits

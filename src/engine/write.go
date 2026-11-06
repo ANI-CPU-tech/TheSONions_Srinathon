@@ -71,6 +71,11 @@ func (db *DB) commit(rec []byte, isDelete bool) (uint64, error) {
 	off := db.size
 	// CRASH: before WriteAt: no byte of rec is on disk. open() ends at the
 	// old size; the op was never acked and is simply absent.
+	crashpoint("before_write")
+	if crashHit("mid_write") || (h.Type == RecBatch && crashHit("batch_mid_write")) {
+		db.f.WriteAt(rec[:len(rec)/2], off) // leave a torn record, then die
+		die()
+	}
 	if _, err := db.f.WriteAt(rec, off); err != nil {
 		return 0, db.fail(err)
 	}
@@ -78,15 +83,18 @@ func (db *DB) commit(rec []byte, isDelete bool) (uint64, error) {
 	// prefix of it) is in the page cache, which a process kill does not
 	// lose. open() applies it if complete with a good CRC (allowed: the op
 	// was in flight, not acked), otherwise truncates it as a torn tail.
+	crashpoint("after_write")
 	if err := db.f.Sync(); err != nil {
 		return 0, db.fail(err)
 	}
 	// After Sync rec is durable but not yet acked; open() applies it, which
 	// is allowed because the op was in flight. No disk changes from here on.
+	crashpoint("after_fsync")
 	if err := db.applyRecord(h, rec[RecordHeaderSize:], off); err != nil {
 		return 0, db.fail(err)
 	}
 	db.size += int64(len(rec))
+	crashpoint("after_index") // indexed, not yet returned, so never acked
 	db.maybeCompact()
 	return h.Seq, nil
 }

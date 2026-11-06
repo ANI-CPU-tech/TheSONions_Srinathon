@@ -46,11 +46,13 @@ func (db *DB) compactLocked() error {
 	}
 	// CRASH: before rename: <path> is the old, complete file and <path>.compact
 	// a complete, fsynced copy. open() deletes the copy and uses the old (C3).
+	crashpoint("compact_after_temp_fsync")
 	if err := os.Rename(tmp, db.path); err != nil {
 		f.Close()
 		removeIfExists(tmp)
 		return err
 	}
+	crashpoint("compact_after_rename")
 	// From here <path> is the new file. Switch to it now, whatever happens
 	// next: every later write must go to the file that open() will read.
 	old := db.f
@@ -63,6 +65,7 @@ func (db *DB) compactLocked() error {
 		db.failed = true // the rename may not be durable; stop writing
 		return fmt.Errorf("%w: directory fsync after compaction: %v", ErrFailed, err)
 	}
+	crashpoint("compact_after_dir_fsync")
 	return nil
 }
 
@@ -98,7 +101,12 @@ func (db *DB) copyLive(f *os.File) (index, int64, error) {
 	}
 	idx := newIndex()
 	size := int64(FileHeaderSize)
+	half := len(db.idx.m) / 2
 	for key, e := range db.idx.m {
+		if len(idx.m) == half && crashHit("compact_mid_temp") {
+			w.Flush() // half the live keys reach the temp file, then die
+			die()
+		}
 		v, err := db.readValue(e)
 		if err != nil {
 			return index{}, 0, err

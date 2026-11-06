@@ -113,6 +113,10 @@ input:disabled, textarea:disabled { opacity: .55; }
 .cardhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .cardtools { display: flex; gap: 8px; align-items: center; }
 .cardtools select { width: auto; padding: 3px 6px; }
+.watch { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.watch input { width: auto; accent-color: var(--accent); }
+.watchhint { margin: 0 0 10px; padding: 8px 10px; border-radius: 4px; background: var(--accent-bg); font-size: 12px; }
+.watchhint code { cursor: copy; word-break: break-all; }
 .footnote { color: var(--faint); font-size: 11px; margin: 12px 0 0; }
 
 /* code path */

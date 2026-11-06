@@ -79,12 +79,15 @@ async function api(path, body) {
   return data;
 }
 
-// streamPost reads an NDJSON response and calls onEvent per line.
+// streamPost reads an NDJSON response and calls onEvent per line; with
+// body null it is a GET.
 async function streamPost(path, body, onEvent, signal) {
-  const res = await fetch(path, {
-    method: 'POST', signal, body: JSON.stringify(body),
-    headers: { 'X-NL-Token': TOKEN, 'Content-Type': 'application/json' },
-  });
+  const opts = { method: 'GET', signal, headers: { 'X-NL-Token': TOKEN } };
+  if (body !== null) {
+    Object.assign(opts, { method: 'POST', body: JSON.stringify(body) });
+    opts.headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(path, opts);
   checkToken(res);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -482,7 +485,7 @@ function renderDisk(snap, diff) {
   const newFrom = diff && diff.added > 0 ? snap.records.length - diff.added : Infinity;
   renderDiskSummary(snap);
   renderFileBar(snap, newFrom);
-  renderDiff(diff);
+  renderDiff(diff, snap);
   renderRecords(snap, newFrom);
   renderIndex(snap);
   if (disk.sel && !selectionValid(snap, disk.sel)) disk.sel = null;
@@ -540,7 +543,7 @@ function renderFileBar(s, newFrom) {
   markSelection();
 }
 
-function renderDiff(d) {
+function renderDiff(d, snap) {
   const el = $('#diff');
   if (!d) return (el.textContent = '');
   const parts = [];
@@ -549,6 +552,7 @@ function renderDiff(d) {
   if (d.rewritten) parts.push(`file rewritten (compaction): ${fmtB(d.sizeFrom)} → ${fmtB(d.sizeTo)}`);
   else if (d.added) parts.push(`+${d.added} record${d.added > 1 ? 's' : ''} (${fmtB(d.sizeTo - d.sizeFrom)})`);
   if (d.tornCut) parts.push(`recovery cut a ${d.tornCut} B torn tail`);
+  else if (snap.torn && !d.rewritten && snap.torn.off >= d.sizeFrom) parts.push(`a partial record of ${snap.torn.bytes} B appeared (torn tail)`);
   for (const t of d.tempNew || []) parts.push(`${t} appeared`);
   for (const t of d.tempGone || []) parts.push(`${t} deleted`);
   if (!d.changed) parts.push('file unchanged');
@@ -825,6 +829,52 @@ function serveControls() {
   const on = !!(S.serve && S.serve.running && S.running && S.running.kind === 'serve');
   for (const sel of ['#serve-kill', '#serve-eof', '#serve-line', '#serve-send']) $(sel).disabled = !on;
   for (const c of $$('#serve-templates .chip')) c.disabled = !on;
+}
+
+// ---------- watch mode ----------
+
+const W = { ac: null };
+
+// startWatch follows the demo database while commands run in a terminal.
+async function startWatch() {
+  const ac = new AbortController();
+  W.ac = ac;
+  const cmd = `./bin/ninelives put ${S.state ? S.state.db : 'demo.db'} a 1`;
+  $('#watchcmd').textContent = cmd;
+  $('#watchhint').hidden = false;
+  try {
+    await streamPost('/api/watch', null, onWatchEvent, ac.signal);
+  } catch (e) {
+    if (e.name !== 'AbortError') conError('watch: ' + e.message);
+  }
+  if (W.ac === ac && !ac.signal.aborted) { // the server ended it: nlui is quitting
+    $('#watch').checked = false;
+    stopWatch();
+  }
+}
+
+function stopWatch() {
+  if (W.ac) W.ac.abort();
+  W.ac = null;
+  $('#watchhint').hidden = true;
+}
+
+// onWatchEvent shows a change made outside nlui. nlui's own runs show
+// their changes themselves, so watch events are ignored while one runs.
+function onWatchEvent(ev) {
+  if (S.running) return;
+  renderDisk(ev.snapshot, ev.diff || null);
+  if (!ev.trace) return; // the first event: the file as it is now
+  showTrace(ev.trace);
+  const block = conBlock('terminal command, seen by watch mode', null);
+  conLine(block, 'note', [ev.trace.summary, $('#diff').textContent].filter(Boolean).join(' · '));
+}
+
+function wireWatch() {
+  $('#watch').addEventListener('change', (e) => (e.target.checked ? startWatch() : stopWatch()));
+  const copyCmd = () => copyText($('#watchcmd').textContent, $('#watchcmd'));
+  $('#watchcmd').addEventListener('click', copyCmd);
+  $('#watchcmd').addEventListener('keydown', (e) => { if (e.key === 'Enter') copyCmd(); });
 }
 
 // ---------- crash lab ----------
@@ -1146,6 +1196,7 @@ async function init() {
   wireTabs();
   wireForms();
   wireActions();
+  wireWatch();
   drawTiles(null);
   drawCycle(null);
   serveControls();

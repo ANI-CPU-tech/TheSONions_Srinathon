@@ -122,3 +122,12 @@ It opens a Chromium app window. Without Chromium it uses the default browser, an
 | Build + tests | `build`, `test` | every step ✓ |
 
 The Code path panel is a model of the source, written by hand. `go test ./scripts/nlui` checks that every function and crash point it names exists and sits where it says. Which steps lit up is worked out from the exit code, the output and the file before and after; it is not a live trace. Click a step chip to replay it; click a record or the torn tail to see its bytes.
+
+**Watch mode.** Tick "watch terminal commands" on the Disk card, then run `./bin/ninelives` on the demo database in any terminal (the card shows a ready command to copy). Each change to the file shows up within about 0.2 s. With no command line, exit code or crash point to go on, the code path is inferred from the change alone, and every summary starts with "inferred". Reads (`get`, `dump`, `check`) do not change the file, so they show nothing. Changes made by nlui's own buttons are not shown twice.
+
+| In a terminal | Expected in the window |
+|---|---|
+| `./bin/ninelives put <db> a 1` | `inferred: 1 record(s) appended` |
+| `NINELIVES_CRASH_AT=mid_write ./bin/ninelives put <db> c 3` | `inferred: a process died while writing a record`, torn tail in red |
+| `./bin/ninelives open <db>` | `inferred: open() ran (recovery)`, `recovery cut a … B torn tail` |
+| `./bin/ninelives compact <db>` | `inferred: compaction ran` |

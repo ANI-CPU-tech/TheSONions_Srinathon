@@ -189,8 +189,12 @@ del c</textarea></label>
       <article class="card" id="disk" aria-labelledby="disk-title">
         <header class="cardhead">
           <h2 id="disk-title">Disk</h2>
-          <span class="muted" id="disk-when"></span>
+          <div class="cardtools">
+            <label class="watch" title="Follow this file while you run ./bin/ninelives in your own terminal"><input type="checkbox" id="watch"> watch terminal commands</label>
+            <span class="muted" id="disk-when"></span>
+          </div>
         </header>
+        <p class="watchhint" id="watchhint" hidden>Watching. Run commands on this file in any terminal, for example (click to copy):<br><code id="watchcmd" role="button" tabindex="0"></code><br>The code path is then inferred from what changed in the file: nlui cannot see the command itself.</p>
         <div class="disksum" id="disksum"></div>
         <div class="filebar" id="filebar" aria-label="The file, byte for byte to scale"></div>
         <div class="legend">

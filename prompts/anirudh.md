@@ -7,3 +7,6 @@ Format:
 <the message exactly as typed>
 ```
 
+### 2026-11-06 12:25 (local time) | Tool: Claude Code | Branch: main
+Before i start my part of taskSplit.md part cud u make a rough scaffold of the project first? Along with the file system architecture and everything just a scaffold dont start any work yet.
+

@@ -154,3 +154,39 @@ func countPrefix(s, prefix string) int {
 	}
 	return n
 }
+
+// TestFakeserveBugsCaught runs the torture loop against fakeserve with each
+// injected bug and asserts the oracle catches it, while --bug=none passes.
+// This is the L2 self-test that runs before the real engine is ready.
+func TestFakeserveBugsCaught(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns processes")
+	}
+	bin := buildFakeserve(t)
+	for _, bug := range []string{"drop-ack", "partial-batch", "garbage", "stale"} {
+		t.Run(bug, func(t *testing.T) {
+			c := config{seed: 11, iterations: 5, mode: "default", bin: bin, bug: bug, dir: t.TempDir()}
+			var out bytes.Buffer
+			if err := run(c, &out); err == nil {
+				t.Fatalf("bug %q: expected failure, got pass\n%s", bug, out.String())
+			}
+		})
+	}
+	t.Run("none", func(t *testing.T) {
+		c := config{seed: 12, iterations: 3, mode: "default", bin: bin, bug: "none", dir: t.TempDir()}
+		var out bytes.Buffer
+		if err := run(c, &out); err != nil {
+			t.Fatalf("bug=none: expected pass, got %v\n%s", err, out.String())
+		}
+		if !strings.Contains(out.String(), "PASS 3/3") {
+			t.Fatalf("bug=none: no PASS line:\n%s", out.String())
+		}
+		log, err := os.ReadFile(filepath.Join(c.runDir(), "oracle.log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if countPrefix(string(log), "KILL ") != 3 {
+			t.Errorf("oracle.log has %d KILL lines, want 3", countPrefix(string(log), "KILL "))
+		}
+	})
+}

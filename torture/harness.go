@@ -36,6 +36,7 @@ type config struct {
 	bin        string
 	dir        string
 	maxBytes   int64
+	bug        string // injected fakeserve fault (L2 self-test), empty for the real binary
 }
 
 func (c config) runDir() string { return filepath.Join(c.dir, strconv.FormatInt(c.seed, 10)) }
@@ -116,7 +117,13 @@ func startServe(c config, o *oracle) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(c.bin, c.cliArgs("serve")...)
+	args := c.cliArgs("serve")
+	if c.bug != "" {
+		// put --bug right after the binary, before the command, so Go's flag
+		// parsing in fakeserve sees it before the first positional argument.
+		args = append([]string{"--bug", c.bug}, args...)
+	}
+	cmd := exec.Command(c.bin, args...)
 	cmd.Stderr = stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

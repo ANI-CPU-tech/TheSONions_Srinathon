@@ -18,6 +18,7 @@ func main() {
 	flag.StringVar(&c.bin, "bin", "./bin/ninelives", "path to the ninelives binary")
 	flag.StringVar(&c.dir, "dir", "runs", "directory for databases and oracle logs")
 	flag.Int64Var(&c.maxBytes, "max-bytes", 0, "max database file size passed to serve (0 = unlimited)")
+	flag.StringVar(&c.bug, "bug", "", "fakeserve injected fault: none|drop-ack|partial-batch|garbage|stale (L2 self-test)")
 	flag.Parse()
 
 	seedSet := false
@@ -62,10 +63,16 @@ func run(c config, out io.Writer) error {
 	o.note("# torture seed=%d mode=%s iterations=%d bin=%s", c.seed, c.mode, c.iterations, c.bin)
 	fmt.Fprintf(out, "torture: seed=%d mode=%s iterations=%d, oracle log %s\n",
 		c.seed, c.mode, c.iterations, filepath.Join(c.runDir(), "oracle.log"))
-	fmt.Fprintln(out, "torture: checks recovery health (open exit 0, check OK, dump parses); dump-vs-oracle verification lands in PR L2")
+	// base is the previously verified dump; iteration 1 starts from nil (SPEC rule 9).
+	base := map[string]string{}
 	for iter := 1; iter <= c.iterations; iter++ {
 		res, err := runIteration(c, o, iter)
 		if err != nil {
+			o.note("FAIL %d %v", iter, err)
+			o.flush()
+			return reportFailure(out, c, res, err)
+		}
+		if err := verify(res.state, o, base); err != nil {
 			o.note("FAIL %d %v", iter, err)
 			o.flush()
 			return reportFailure(out, c, res, err)
@@ -75,6 +82,7 @@ func run(c config, out io.Writer) error {
 			return reportSetup(out, err)
 		}
 		fmt.Fprintln(out, summary(c, res))
+		base = res.state // the verified dump becomes the base for the next iteration
 	}
 	fmt.Fprintf(out, "PASS %d/%d iterations (seed %d, mode %s)\n", c.iterations, c.iterations, c.seed, c.mode)
 	return nil

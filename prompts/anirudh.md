@@ -359,3 +359,13 @@ push both and give me a PR desc (dont add urself as a contributor)
 ### 2026-11-06 23:40 (local time) | Tool: Claude Code | Branch: main
 [Image #10: screenshot of nlui running from main, Disk card with the watch terminal commands switch]
 what do i do? do i run the CLI in another terminal??? and then check?
+
+### 2026-11-06 23:43 (local time) | Tool: Claude Code | Branch: main
+[Image #12: nlui with watch terminal commands ticked, no file yet]
+can i run all these commands? will it simulate them too?
+
+<pasted text>
+[docs/TESTING.md sections 1-5: nlshell commands /build /test ... /reset /put ... /serve ... /crash ... /torture ... /selftest]
+</pasted text>
+
+???

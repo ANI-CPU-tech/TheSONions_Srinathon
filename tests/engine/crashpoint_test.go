@@ -95,6 +95,7 @@ func TestCrashPoints(t *testing.T) {
 		{"before_write", ""},
 		{"mid_write", ""},
 		{"after_write", ""},
+		{"after_write", "2"}, // batch written, not fsynced, step 1 (B3)
 		{"after_fsync", ""},
 		{"after_fsync", "3"}, // dies inside the delete, step 2
 		{"after_index", ""},

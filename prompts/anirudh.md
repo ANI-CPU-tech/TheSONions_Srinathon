@@ -107,3 +107,6 @@ gimme a desc for the PR keep it fairly human and simple
 
 ### 2026-11-06 16:23 (local time) | Tool: Claude Code | Branch: anirudh/L4-L5-modes-docs
 Is the project Practically done or shud i now start that integration task??? (just asking a question)
+
+### 2026-11-06 16:26 (local time) | Tool: Claude Code | Branch: anirudh/L4-L5-modes-docs
+start the integration task on main branch itself, but dont push anything

@@ -1,1 +1,28 @@
-%% TODO(Khushi, PR K4): recovery flow, docs/SPEC.md section 6
+%% Recovery flow - SPEC section 6, what open() does, in order.
+%% Owner: Khushi (PR K4).
+flowchart TD
+    START["open(path, max_bytes)"] --> S1
+
+    S1["STEP 1 - Remove leftover &lt;path&gt;.compact and &lt;path&gt;.init<br/>// CRASH: leftovers are NEVER authoritative, just deleted again"] --> S2
+    S2{"&lt;path&gt; exists?"}
+    S2 -->|"no"| CREATE["STEP 2 - Create it (SPEC 5):<br/>write header to &lt;path&gt;.init, fsync,<br/>rename to &lt;path&gt;, fsync the directory<br/>// CRASH: either no file or a complete header"]
+    S2 -->|"yes"| HDR
+    CREATE --> HDR{"STEP 3 - Read and validate the 24-byte header:<br/>magic NLV1, version 1, CRC32-C of bytes 0..19"}
+    HDR -->|"invalid"| BAD["return ErrNotNineLives<br/>(cannot happen for our own files:<br/>header is fsynced before the rename)"]
+    HDR -->|"valid"| SCAN
+
+    SCAN["STEP 4 - Scan from offset 24 with a bufio.Reader (&gt;= 1 MiB)<br/>at each offset, in a loop"] --> Q1{"fewer than 17<br/>bytes remain?"}
+    Q1 -->|"yes"| TORN["the tail is TORN"]
+    Q1 -->|"no"| Q2{"Length too large for MaxBatchPayload<br/>or record runs past end of file?"}
+    Q2 -->|"yes"| TORN
+    Q2 -->|"no"| Q3{"read payload,<br/>CRC32-C matches?"}
+    Q3 -->|"no"| TORN
+    Q3 -->|"yes"| APPLY["apply the record to the index<br/>(a batch applies all its ops AT ONCE)<br/>advance; values are not copied,<br/>the index stores offset + length + seq"]
+    APPLY --> Q1
+
+    TORN --> S5
+    Q1 -->|"validEnd == file size"| S6
+    S5["STEP 5 - if validEnd &lt; fileSize:<br/>file.Truncate(validEnd) then file.Sync()<br/>// CRASH: idempotent - a kill here is simply redone<br/>by the next open; acknowledged records are kept"]
+    S5 --> S6["STEP 6 - size = validEnd,<br/>nextSeq = max(header.SeqBase, maxRecordSeq + 1),<br/>compute dead bytes. The DB is ready.<br/>recovery is measured and reported as recovery_ms"]
+
+    S6 --> PERF["Performance targets: well under 1 s for 1M small keys,<br/>open under 2 s at 1M keys (benchmark, A5).<br/>A torn tail is TRUNCATED, never guessed at:<br/>anything after the first bad record was never acked."]

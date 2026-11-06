@@ -1,1 +1,23 @@
-%% TODO(Khushi, PR K4): temp file, fsync, rename, dir fsync, handle swap
+%% Compaction - SPEC section 7: temp file, fsync, rename, dir fsync, swap.
+%% Owner: Khushi (PR K4).
+flowchart TD
+    START["Compact() under the WRITE lock<br/>triggers: automatic (file &gt;= 4 MiB and dead &gt; 50%),<br/>from the disk-full guard, or the compact command / serve compact op"]
+    START --> S1
+
+    S1["STEP 1 - Create &lt;path&gt;.compact with O_TRUNC,<br/>write a header with SeqBase = nextSeq<br/>// CRASH: old file untouched, temp deleted on next open (C3)"]
+    S1 --> S2["STEP 2 - For every LIVE key: read its value from the old file,<br/>append a PUT record with the key's ORIGINAL seq,<br/>build the new index as you go"]
+    S2 --> S3{"STEP 3 - would the temp file<br/>exceed max_bytes?"}
+    S3 -->|"yes"| ABORT["abort, remove the temp file, return ErrDiskFull (E4)<br/>THE OLD FILE IS UNTOUCHED"]
+    S3 -->|"no"| MORE{"live keys<br/>left?"}
+    MORE -->|"yes"| S2
+    MORE -->|"no"| S4
+
+    S4["STEP 4 - fsync the temp file<br/>// CRASH: complete temp file, old file still authoritative"]
+    S4 --> S5["STEP 5 - os.Rename(&lt;path&gt;.compact, &lt;path&gt;)<br/>atomic on Linux and macOS<br/>// CRASH: after this the NEW file is complete (C4, C5)"]
+    S5 --> S6["STEP 6 - fsync the parent directory<br/>// CRASH: the rename itself is durable"]
+    S6 --> S7["STEP 7 - Swap file handles to the new file,<br/>install the new index, reset dead bytes<br/>the file shrinks: only live keys remain"]
+
+    S7 --> OUT["Readers wait on the write lock during all of this,<br/>so a get never sees the file half-swapped.<br/>After a kill at any step there is exactly one truth:<br/>the file at &lt;path&gt; with a valid header."]
+
+    style ABORT fill:#ffd9d9
+    style S7 fill:#d9f7d9

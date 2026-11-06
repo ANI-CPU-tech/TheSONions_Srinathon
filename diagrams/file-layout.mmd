@@ -1,1 +1,28 @@
-%% TODO(Khushi, PR K4): 24-byte header and record layout with byte offsets
+%% On-disk file layout (SPEC section 3). All integers little-endian.
+%% Precise enough to write a parser; judges spot-check against a hex dump.
+%% Owner: Khushi (PR K4).
+flowchart TB
+    subgraph HDR["File header: 24 bytes, written only at creation and by compaction"]
+        direction LR
+        H0["0..3<br/>Magic<br/>NLV1"] --> H1["4..5<br/>Format version<br/>1"] --> H2["6..7<br/>Flags<br/>0"] --> H3["8..15<br/>SeqBase u64<br/>next seq at creation"] --> H4["16..19<br/>Reserved<br/>0"] --> H5["20..23<br/>CRC32-C<br/>of bytes 0..19"]
+    end
+
+    HDR -->|"records start at offset 24"| REC
+
+    subgraph REC["Record: repeated until end of file (offsets from the record start)"]
+        direction LR
+        R0["0..3<br/>CRC32-C over<br/>bytes 4..end<br/>THE COMMIT MARKER"] --> R1["4..7<br/>Length u32<br/>payload bytes"] --> R2["8<br/>Type u8<br/>1 PUT, 2 DEL,<br/>3 BATCH"] --> R3["9..16<br/>Seq u64<br/>monotonic, unique"] --> R4["17..17+Length<br/>Payload"]
+    end
+
+    REC --> PAY
+
+    subgraph PAY["Payload formats"]
+        direction TB
+        P1["PUT: key_len u16, key, val_len u32, value"]
+        P2["DEL: key_len u16, key"]
+        P3["BATCH: count u32, then count x (op u8: 1 put / 2 del, key_len u16, key, and val_len u32 + value only for put)"]
+    end
+
+    PAY --> RULES["Commit rule: a record exists only if all Length bytes are present AND the CRC matches.<br/>A batch is one record with one CRC - that is why it is all-or-nothing.<br/>Operations inside a batch apply in listed order: put X; del X leaves X deleted (B5).<br/>Seq is not an offset: offsets change at compaction, Seq never goes backwards."]
+
+    FILENOTE["&lt;path&gt; either does not exist or has a complete header:<br/>creation writes header to &lt;path&gt;.init, fsyncs, renames, fsyncs the directory.<br/>Compaction writes &lt;path&gt;.compact the same way; both temp files are deleted on open."]

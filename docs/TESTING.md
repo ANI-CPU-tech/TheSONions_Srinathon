@@ -131,3 +131,15 @@ The Code path panel is a model of the source, written by hand. `go test ./script
 | `NINELIVES_CRASH_AT=mid_write ./bin/ninelives put <db> c 3` | `inferred: a process died while writing a record`, torn tail in red |
 | `./bin/ninelives open <db>` | `inferred: open() ran (recovery)`, `recovery cut a … B torn tail` |
 | `./bin/ninelives compact <db>` | `inferred: compaction ran` |
+
+**nlshell and the window together.** nlshell writes `/tmp/nl/demo.db` and nlui writes `/tmp/nlui/demo.db` by default. To make the window follow nlshell, point nlui at nlshell's folder:
+
+```sh
+# terminal 1: the window, watching nlshell's database
+go build -o bin/nlui ./scripts/nlui && ./bin/nlui --dir /tmp/nl
+
+# terminal 2: the CLI menu
+go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
+```
+
+Then tick "watch terminal commands" and use nlshell as in sections 2 to 4. Writes, `/serve`, recovery and compaction show up in the window. Reads, the build, the Go tests and torture do not change this file, so they show nothing; use nlui's own tabs for those. A `/crash` scenario runs its commands within milliseconds, so the window may show them as one change; the Crash lab tab shows them step by step. Do not click nlui's buttons while nlshell is writing: the engine has no file lock, so two writers on one file at once can corrupt it.

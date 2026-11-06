@@ -67,3 +67,115 @@ func TestFileHeaderRejectsBadInput(t *testing.T) {
 		}
 	}
 }
+
+// decode parses a whole encoded record the way recovery will: header first,
+// then exactly Length payload bytes, then the CRC check.
+func decode(b []byte) (engine.RecordHeader, []byte, error) {
+	h, err := engine.DecodeRecordHeader(b)
+	if err != nil {
+		return h, nil, err
+	}
+	end := engine.RecordHeaderSize + int(h.Length)
+	if end > len(b) {
+		end = len(b) // record runs past the end of the bytes we have
+	}
+	payload := b[engine.RecordHeaderSize:end]
+	return h, payload, engine.VerifyRecord(h, payload)
+}
+
+func TestPutRecordLayout(t *testing.T) {
+	rec := engine.EncodePut(7, []byte("ab"), []byte("xyz"))
+	want := []byte{
+		11, 0, 0, 0, // Length
+		0x01,                   // Type PUT
+		7, 0, 0, 0, 0, 0, 0, 0, // Seq
+		2, 0, 'a', 'b', // key_len, key
+		3, 0, 0, 0, 'x', 'y', 'z', // val_len, value
+	}
+	if !bytes.Equal(rec[4:], want) {
+		t.Fatalf("record bytes 4.. = % x, want % x", rec[4:], want)
+	}
+	if got, crc := binary.LittleEndian.Uint32(rec[:4]), crc32.Checksum(want, castagnoli); got != crc {
+		t.Fatalf("record CRC = %08x, want CRC32-C %08x", got, crc)
+	}
+}
+
+func TestDelRecordLayout(t *testing.T) {
+	rec := engine.EncodeDel(1<<32, []byte("k"))
+	want := []byte{
+		3, 0, 0, 0, // Length
+		0x02,                   // Type DEL
+		0, 0, 0, 0, 1, 0, 0, 0, // Seq 1<<32
+		1, 0, 'k', // key_len, key
+	}
+	if !bytes.Equal(rec[4:], want) {
+		t.Fatalf("record bytes 4.. = % x, want % x", rec[4:], want)
+	}
+}
+
+func TestBatchRecordLayout(t *testing.T) {
+	rec := engine.EncodeBatch(9, []engine.Op{
+		{Kind: engine.OpPut, Key: []byte("a"), Value: []byte("1")},
+		{Kind: engine.OpDel, Key: []byte("b"), Value: []byte("ignored")},
+	})
+	want := []byte{
+		17, 0, 0, 0, // Length
+		0x03,                   // Type BATCH
+		9, 0, 0, 0, 0, 0, 0, 0, // Seq
+		2, 0, 0, 0, // count
+		0x01, 1, 0, 'a', 1, 0, 0, 0, '1', // put a 1
+		0x02, 1, 0, 'b', // del b (no value bytes)
+	}
+	if !bytes.Equal(rec[4:], want) {
+		t.Fatalf("record bytes 4.. = % x, want % x", rec[4:], want)
+	}
+}
+
+func TestRecordHeaderRoundTrip(t *testing.T) {
+	rec := engine.EncodePut(123, []byte("key"), []byte("value"))
+	h, payload, err := decode(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Type != engine.RecPut || h.Seq != 123 || int(h.Length) != len(rec)-engine.RecordHeaderSize {
+		t.Fatalf("header = %+v", h)
+	}
+	if !bytes.Equal(payload, rec[engine.RecordHeaderSize:]) {
+		t.Fatal("payload mismatch")
+	}
+}
+
+// Every strict prefix of a record is what a kill mid-write can leave behind.
+// None of them may pass as a committed record.
+func TestTornRecordDetected(t *testing.T) {
+	rec := engine.EncodeBatch(5, []engine.Op{
+		{Kind: engine.OpPut, Key: []byte("k1"), Value: bytes.Repeat([]byte("v"), 100)},
+		{Kind: engine.OpDel, Key: []byte("k2")},
+	})
+	for n := 0; n < len(rec); n++ {
+		if _, _, err := decode(rec[:n]); !errors.Is(err, engine.ErrTornRecord) {
+			t.Fatalf("prefix of %d/%d bytes: err = %v, want ErrTornRecord", n, len(rec), err)
+		}
+	}
+}
+
+// Flipping any byte (header, CRC or payload) must be caught.
+func TestBadCRCDetected(t *testing.T) {
+	rec := engine.EncodePut(1, []byte("key"), []byte("value"))
+	for i := range rec {
+		bad := append([]byte(nil), rec...)
+		bad[i] ^= 0xFF
+		if _, _, err := decode(bad); !errors.Is(err, engine.ErrTornRecord) {
+			t.Fatalf("flip byte %d: err = %v, want ErrTornRecord", i, err)
+		}
+	}
+}
+
+// A garbage Length must not make recovery try to read gigabytes.
+func TestOversizedLengthRejected(t *testing.T) {
+	rec := engine.EncodePut(1, []byte("k"), []byte("v"))
+	binary.LittleEndian.PutUint32(rec[4:8], engine.MaxRecordPayload+1)
+	if _, err := engine.DecodeRecordHeader(rec); !errors.Is(err, engine.ErrTornRecord) {
+		t.Fatalf("err = %v, want ErrTornRecord", err)
+	}
+}

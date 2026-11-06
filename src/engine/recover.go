@@ -140,5 +140,36 @@ func (db *DB) applyRecord(h RecordHeader, payload []byte, off int64) error {
 	return nil
 }
 
-// Check verifies the file at path without modifying it. nil means OK.
-func Check(path string) error { return ErrNotImplemented }
+// Check verifies the file at path without modifying it (SPEC section 11):
+// valid header, every record complete with a good CRC and a well-formed
+// payload, a clean tail, and no leftover temp files. nil means OK; the
+// error text is the reason the CLI prints after "CORRUPT:".
+func Check(path string) error {
+	for _, tmp := range []string{compactPath(path), initPath(path)} {
+		if _, err := os.Stat(tmp); err == nil {
+			return fmt.Errorf("%w: leftover temp file %s", ErrCorrupt, tmp)
+		}
+	}
+	f, err := os.Open(path) // read-only
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := readHeader(f); err != nil {
+		return err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	validEnd, err := scanLog(f, fi.Size(), func(h RecordHeader, payload []byte, _ int64) error {
+		return WalkPayload(h.Type, payload, func(OpKind, []byte, int, int) error { return nil })
+	})
+	if err != nil {
+		return err
+	}
+	if validEnd != fi.Size() {
+		return fmt.Errorf("%w: torn tail at offset %d (file is %d bytes)", ErrCorrupt, validEnd, fi.Size())
+	}
+	return nil
+}

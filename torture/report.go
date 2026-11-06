@@ -19,6 +19,9 @@ func reportFailure(out io.Writer, c config, r result, err error) error {
 	fmt.Fprintf(out, "FAIL iter %d/%d delay=%dms sent=%d acked=%d err=%d inflight=%d\n",
 		r.iter, c.iterations, r.delay.Milliseconds(), r.sent, r.acked, r.errs, r.flight)
 	fmt.Fprintf(out, "  %v\n", err)
+	if vf, ok := err.(*verifyFailure); ok {
+		fmt.Fprintf(out, "  key=%q found=%q expected=%v opids=%v\n", vf.key, vf.found, vf.expect, vf.opids)
+	}
 	fmt.Fprintf(out, "  oracle log: %s/oracle.log, serve stderr: %s/serve.stderr\n", c.runDir(), c.runDir())
 	fmt.Fprintf(out, "  repro: %s\n", repro(c, r.iter))
 	fmt.Fprintf(out, "FAILED after %d of %d iterations passed (seed %d, mode %s)\n", r.iter-1, c.iterations, c.seed, c.mode)

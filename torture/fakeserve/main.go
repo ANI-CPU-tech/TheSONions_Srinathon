@@ -5,9 +5,10 @@
 // per acked request, appended with one write and fsynced before the ACK.
 // A line without its newline is a torn write and is dropped.
 //
-// This is the honest version (--bug=none). The deliberate bugs that prove
-// the oracle catches them (drop-ack, partial-batch, garbage, stale) land in
-// PR L2.
+// --bug injects a deliberate fault so the torture oracle can be proven to
+// catch it: none (honest), drop-ack (ACK without writing), partial-batch
+// (ACK a truncated batch), garbage (an untouched key/value line), stale (ACK
+// a put with a wrong value). PR L2.
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -23,14 +25,18 @@ import (
 	"strings"
 )
 
+var bugMode string
+
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: fakeserve serve|open|check|dump <path> [--max-bytes N]")
+	flag.StringVar(&bugMode, "bug", "none", "injected bug: none|drop-ack|partial-batch|garbage|stale")
+	flag.Parse()
+	if flag.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "usage: fakeserve [--bug=X] serve|open|check|dump <path> [--max-bytes N]")
 		os.Exit(2)
 	}
-	path := os.Args[2] // --max-bytes is accepted and ignored
+	path := flag.Arg(1) // --max-bytes is accepted and ignored
 	var err error
-	switch os.Args[1] {
+	switch flag.Arg(0) {
 	case "serve":
 		err = serve(path)
 	case "open":
@@ -40,7 +46,7 @@ func main() {
 	case "dump":
 		err = dump(path)
 	default:
-		fmt.Fprintln(os.Stderr, "fakeserve: unknown command", os.Args[1])
+		fmt.Fprintln(os.Stderr, "fakeserve: unknown command", flag.Arg(0))
 		os.Exit(2)
 	}
 	if err != nil {
@@ -183,18 +189,50 @@ func serve(path string) error {
 	for in.Scan() {
 		auto++
 		opid, req := splitPrefix(in.Text(), auto)
-		line, err := readRequest(req, in)
+		ops, isBatch, err := readRequest(req, in)
 		if err != nil {
 			fmt.Printf("ERR %s BADREQ %v\n", opid, err)
 			continue
 		}
-		// One write, then fsync, then ACK: a kill before the fsync leaves a
-		// complete line (applied, allowed) or a torn one (dropped).
-		if _, err := f.WriteString(line + "\n"); err != nil {
-			return err
-		}
-		if err := f.Sync(); err != nil {
-			return err
+		opidNum, _ := strconv.ParseUint(opid, 10, 64)
+		// trigger is a deterministic pseudo-random fault source derived from
+		// the request, so a seed reproduces the bug pattern.
+		trigger := func(n uint64) bool { return n%3 == 0 }
+
+		// drop-ack: acknowledge the op without writing it, so it is durable
+		// in the oracle's eyes but missing on disk.
+		dropped := bugMode == "drop-ack" && trigger(opidNum)
+		if !dropped {
+			// garbage: occasionally inject an untouched key/value line.
+			if bugMode == "garbage" && trigger(uint64(auto)) {
+				gk := "x:" + hex.EncodeToString([]byte("garbage-key"))
+				gv := "x:" + hex.EncodeToString([]byte("garbage-value"))
+				f.WriteString(fmt.Sprintf("put %s %s\n", gk, gv))
+				f.Sync()
+			}
+			line := strings.Join(ops, " ")
+			// partial-batch: ACK a batch after writing only a prefix of it.
+			if bugMode == "partial-batch" && isBatch && trigger(opidNum) && len(ops) > 1 {
+				keep := 1 + int(auto)%(len(ops)-1)
+				ops = ops[:keep]
+				line = strings.Join(ops, " ")
+			}
+			// stale: ACK a put while storing a wrong value for its key.
+			if bugMode == "stale" && !isBatch {
+				f := strings.Fields(line)
+				if len(f) == 3 && f[0] == "put" && trigger(opidNum) {
+					f[2] = "x:" + hex.EncodeToString([]byte("stale-value"))
+					line = strings.Join(f, " ")
+				}
+			}
+			// One write, then fsync, then ACK: a kill before the fsync leaves a
+			// complete line (applied, allowed) or a torn one (dropped).
+			if _, err := f.WriteString(line + "\n"); err != nil {
+				return err
+			}
+			if err := f.Sync(); err != nil {
+				return err
+			}
 		}
 		seq++
 		fmt.Printf("ACK %s %d\n", opid, seq)
@@ -212,28 +250,29 @@ func splitPrefix(line string, auto int) (opid, rest string) {
 	return strconv.Itoa(auto), line
 }
 
-// readRequest turns a put, del or batch request into one log line,
-// reading a batch's op lines from in.
-func readRequest(req string, in *bufio.Scanner) (string, error) {
+// readRequest turns a put, del or batch request into its op lines, reading a
+// batch's op lines from in.
+func readRequest(req string, in *bufio.Scanner) (ops []string, isBatch bool, err error) {
 	f := strings.Fields(req)
 	if len(f) == 2 && f[0] == "batch" {
 		n, err := strconv.Atoi(f[1])
 		if err != nil || n < 0 {
-			return "", fmt.Errorf("bad batch count %q", f[1])
+			return nil, false, fmt.Errorf("bad batch count %q", f[1])
 		}
-		ops := make([]string, 0, n)
+		isBatch = true
+		ops = make([]string, 0, n)
 		for range n {
 			if !in.Scan() {
-				return "", errors.New("batch cut short")
+				return nil, false, errors.New("batch cut short")
 			}
 			ops = append(ops, in.Text())
 		}
-		return strings.Join(ops, " "), nil
+		return ops, true, nil
 	}
 	if (len(f) == 3 && f[0] == "put") || (len(f) == 2 && f[0] == "del") {
-		return req, nil
+		return []string{req}, false, nil
 	}
-	return "", fmt.Errorf("unsupported request %q", req)
+	return nil, false, fmt.Errorf("unsupported request %q", req)
 }
 
 func decode2(a, b string) (string, string, error) {

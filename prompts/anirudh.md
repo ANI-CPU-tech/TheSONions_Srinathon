@@ -31,3 +31,32 @@ gimme a desc for the PR, keep it short and simple and faily human
 
 ### 2026-11-06 12:53 (local time) | Tool: Claude Code | Branch: anirudh/A3-disk-full
 start A3 on a new branch
+
+### 2026-11-06 13:00 (local time) | Tool: Claude Code | Branch: anirudh/A3-disk-full
+gimme a desc for the PR keep it simple and fairly human
+
+### 2026-11-06 13:02 (local time) | Tool: Claude Code | Branch: anirudh/A4-compaction
+start A4 on a new branch
+
+### 2026-11-06 13:17 (local time) | Tool: Claude Code | Branch: anirudh/A4-compaction
+gimme a desc for the PR keep it faily human and simple
+
+### 2026-11-06 13:19 (local time) | Tool: Claude Code | Branch: anirudh/A5-crashpoints-bench
+start A5 on a new branch
+
+### 2026-11-06 13:28 (local time) | Tool: Claude Code | Branch: anirudh/A5-crashpoints-bench
+gimme a desc for the PR keep it fairly humand and simple
+
+### 2026-11-06 13:29 (local time) | Tool: Claude Code | Branch: anirudh/A6-architecture
+Start A6 on a new Branch
+
+### 2026-11-06 14:15 (local time) | Tool: Claude Code | Branch: anirudh/A6-architecture
+continue
+
+### 2026-11-06 14:18 (local time) | Tool: Claude Code | Branch: anirudh/A6-architecture
+gimme a desc for the PR keep it fairly human and simple
+
+### 2026-11-06 14:23 (local time) | Tool: Claude Code | Branch: anirudh/L1-harness
+Ok so now we have a change of plan, likith's AI agents are not working, so i will be taking over.
+
+So now start doing the L1 task

@@ -369,3 +369,13 @@ can i run all these commands? will it simulate them too?
 </pasted text>
 
 ???
+
+### 2026-11-07 00:06 (local time) | Tool: Claude Code | Branch: main
+So shud i now use ./bin/nlui --dir /tmp/nl to run the ui and ./bin/nlshell to run the CLI?
+
+what about these commands?
+
+go build -o bin/nlui ./scripts/nlui && ./bin/nlui
+go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
+
+Just asking a question (dont build anything)

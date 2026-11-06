@@ -1,6 +1,7 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 23:30 IST   Branch: anirudh/X3-watch   Current PR: X3 (not opened yet)
+Last updated: 2026-11-07 00:35 IST   Branch: main   Current PR: none (X3 merged as #12)
 ## Done
+- Miro board (team board uXjVERbFfok=): seven new 3600x1800 frames below the old ones, drawn from the code as it is now: 08 Architecture (as built), 09 System Map, 10 CLI and serve, 11 Torture (as built), 12 nlshell, 13 nlui, 14 What changed (first plan vs as built, with links). Old frames 06 and 07 left untouched; they still show the first plan (16-byte header, LSN = offset, one mutex).
 - docs/TESTING.md: the hand-test commands in order (nlshell), with expected output; pushed to main (commit 28bbf8a)
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams

@@ -394,3 +394,10 @@ go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
 
 
 add these to commands into TESTING.md too, commit and push it into main (dont add urself as a contributor)
+
+### 2026-11-07 00:19 (local time) | Tool: Claude Code | Branch: main
+Scan the Codebase throughly.
+Then  connect to my miro board 
+https://miro.com/app/board/uXjVERbFfok=/?share_link_id=668417959412
+
+Then update the architecture diagram with the actual changes we had in our approach we had while building follow the same rectangular ratio for the architecture diagram explain everything, even for other tools thru proper flow diagrams show the proper workflow in every diagram and even the architecture, keep things very clear and also easy to understand.

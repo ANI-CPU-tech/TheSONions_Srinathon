@@ -291,3 +291,28 @@ Ctrl-C stops a long run without leaving nlshell. Ctrl-D quits.
 </pasted text>
 
 Make a MD file where i can add all the test commands, for now add all these commands in that and commit and push it into the main branch, dont add urself as a contributor
+
+### 2026-11-06 22:28 (local time) | Tool: Claude Code | Branch: main
+ultrathink
+I need you to go through the entire codebase properly and understand it!
+Then, I need you to make the following changes:
+
+Can we create like an application UI that basically is simulating each and every command as we are running it. U can probably using electron to do that? or any other fitting framework for it that is best suitable.
+
+
+
+<pasted text>
+If you have any questions/doubts, PLEASE FEEL FREE TO ASK!
+Don't assume anything whatsoever!
+
+Make no mistakes!
+I need it to be production-level and industrial-grade quality!
+</pasted text>
+
+### 2026-11-06 22:33 (local time) | Tool: Claude Code | Branch: main
+(answers picked in Claude Code's question dialog)
+Framework: Go stdlib web app (Recommended)
+Simulation: Real run + step animation (Recommended)
+Panels: CLI commands, Serve + kill, Crash-point lab, Torture + tests
+Placement: Part of the judged demo
+(then approved the plan)

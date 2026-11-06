@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,9 @@ func TestSnapshotMatchesEngine(t *testing.T) {
 	ops := s.Records[2].Ops
 	if s.Records[2].OpCount != 3 || ops[0].Live || !ops[1].Live || ops[2].Live {
 		t.Errorf("batch ops %+v", ops)
+	}
+	if b, _ := os.ReadFile(path); s.Hex != hex.EncodeToString(b) {
+		t.Error("snapshot does not carry the file bytes")
 	}
 	st := engineStats(t, path)
 	if s.Keys != st.Keys || s.DeadBytes != st.DeadBytes || s.NextSeq != st.NextSeq || s.ValidEnd != st.FileBytes {

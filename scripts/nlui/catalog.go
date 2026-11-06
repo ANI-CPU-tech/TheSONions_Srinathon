@@ -92,8 +92,12 @@ func (a *app) buildJob(req runRequest) (job, error) {
 	return actions[i].build(a, req.Args, req.MaxBytes)
 }
 
-// cli is one ./bin/ninelives command on the demo database.
+// cli is one ./bin/ninelives command on the demo database. With no title,
+// the title is the command and its arguments, without the long DB path.
 func (a *app) cli(title, cmd string, maxBytes int64, args ...string) step {
+	if title == "" {
+		title = strings.TrimSpace(cmd + " " + strings.Join(args, " "))
+	}
 	argv := append([]string{nlBin, cmd, a.db}, args...)
 	if maxBytes > 0 && cmd != "check" { // check takes no cap
 		argv = append(argv, "--max-bytes", strconv.FormatInt(maxBytes, 10))

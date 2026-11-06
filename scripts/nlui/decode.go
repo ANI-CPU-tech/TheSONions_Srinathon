@@ -29,6 +29,7 @@ const (
 	maxViewKeys    = 2000     // list at most this many index rows
 	previewBytes   = 48       // bytes of a key or value shown in a token
 	maxHexBytes    = 4096     // largest /api/bytes read
+	maxInlineBytes = 64 << 10 // files up to this size carry their bytes in the snapshot
 )
 
 // snapshot is the database file as it is on disk right now.
@@ -51,6 +52,9 @@ type snapshot struct {
 	LiveBytes int64        `json:"liveBytes"`
 	DeadBytes int64        `json:"deadBytes"`
 	NextSeq   uint64       `json:"nextSeq"`
+	// Hex is the whole file when it is small, so the inspector shows the
+	// bytes of this snapshot, not of the file as it is later.
+	Hex string `json:"hex,omitempty"`
 }
 
 type headerView struct {
@@ -139,6 +143,9 @@ func takeSnapshot(path string) *snapshot {
 	if err != nil {
 		s.Error = err.Error()
 		return s
+	}
+	if len(b) <= maxInlineBytes {
+		s.Hex = hex.EncodeToString(b)
 	}
 	s.decode(b)
 	return s

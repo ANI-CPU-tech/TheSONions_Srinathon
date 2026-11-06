@@ -345,3 +345,7 @@ how do i run the ui?
  
 
 fix this
+
+### 2026-11-06 23:25 (local time) | Tool: Claude Code | Branch: main
+Cud'nt we have a feature where we run the CLI and simulatenously in the ui it shows what exactly is happening in the background thru actual simulations?
+Cud'nt we do that? Just asking a question. (dont build anything)

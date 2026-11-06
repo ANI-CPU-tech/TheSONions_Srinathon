@@ -88,7 +88,10 @@ func (db *DB) recoverLog() error {
 		return err
 	}
 	db.nextSeq = seqBase
-	validEnd, err := scanLog(db.f, fi.Size(), db.applyRecord)
+	validEnd, err := scanLog(db.f, fi.Size(), func(h RecordHeader, payload []byte, off int64) error {
+		crashpoint("recovery_mid_scan") // read-only so far; next open() rescans
+		return db.applyRecord(h, payload, off)
+	})
 	if err != nil {
 		return err
 	}
@@ -107,9 +110,11 @@ func truncateTail(f *os.File, validEnd int64) error {
 	// CRASH: before Truncate: the torn tail is still on disk. Nothing was
 	// applied from it; the next open() scans, stops at the same offset and
 	// truncates again (idempotent).
+	crashpoint("recovery_before_truncate")
 	if err := f.Truncate(validEnd); err != nil {
 		return err
 	}
+	crashpoint("recovery_after_truncate")
 	// CRASH: after Truncate, before Sync: the cut may not be durable yet.
 	// Either way the next open() sees a clean end or the same torn tail.
 	return f.Sync()

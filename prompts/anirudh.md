@@ -37,3 +37,9 @@ gimme a desc for the PR keep it simple and fairly human
 
 ### 2026-11-06 13:02 (local time) | Tool: Claude Code | Branch: anirudh/A4-compaction
 start A4 on a new branch
+
+### 2026-11-06 13:17 (local time) | Tool: Claude Code | Branch: anirudh/A4-compaction
+gimme a desc for the PR keep it faily human and simple
+
+### 2026-11-06 13:19 (local time) | Tool: Claude Code | Branch: anirudh/A5-crashpoints-bench
+start A5 on a new branch

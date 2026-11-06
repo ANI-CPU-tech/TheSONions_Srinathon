@@ -119,3 +119,6 @@ So is the building part completely done? (Just asking a question)
 
 ### 2026-11-06 16:36 (local time) | Tool: Claude Code | Branch: main
 How do i test the entire thing? How do i run the CLI and test it? Gimme all the commands and the extact the flow to test everything that we have built so far!
+
+### 2026-11-06 16:43 (local time) | Tool: Claude Code | Branch: main
+Instead of me running all these commands manually create a CLI interface like Gemini CLI where i can select the commands using autofill instead of me manually typing them.

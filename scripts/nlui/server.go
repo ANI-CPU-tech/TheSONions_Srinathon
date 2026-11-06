@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,6 +34,10 @@ type app struct {
 	slot chan struct{} // capacity 1: holds the running job or serve session
 	quit chan struct{} // closed at shutdown: ends the watch streams
 	stop sync.Once
+	// freed is when the slot was last released (unix ns). Watch mode
+	// ignores file changes nlui itself made: while the slot is held and
+	// just after.
+	freed atomic.Int64
 
 	mu     sync.Mutex
 	cancel context.CancelFunc // stops the running job; nil when none runs
@@ -115,7 +120,16 @@ func (a *app) acquire() bool {
 	}
 }
 
-func (a *app) release() { <-a.slot }
+func (a *app) release() {
+	a.freed.Store(time.Now().UnixNano())
+	<-a.slot
+}
+
+// ownWrite reports whether the file may have been changed by nlui's own
+// job or serve session: one runs now, or one ended within quiet.
+func (a *app) ownWrite(quiet time.Duration) bool {
+	return len(a.slot) > 0 || time.Since(time.Unix(0, a.freed.Load())) < quiet
+}
 
 // shutdown stops whatever runs, so its stream ends and the server can
 // stop: the job is cancelled, serve gets stdin EOF (a clean exit).

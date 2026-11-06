@@ -40,7 +40,8 @@ func sigOf(path string) fileSig {
 
 // handleWatch streams a snapshot each time the demo database changes and
 // then stays the same for one more poll, so a write caught halfway is not
-// shown as a torn tail. It runs until the page stops reading or nlui quits.
+// shown as a torn tail. Changes from nlui's own jobs are skipped: the job
+// already shows them. It runs until the page stops reading or nlui quits.
 func (a *app) handleWatch(w http.ResponseWriter, r *http.Request) {
 	out := newStream(w)
 	prev := takeSnapshot(a.db)
@@ -66,6 +67,10 @@ func (a *app) handleWatch(w http.ResponseWriter, r *http.Request) {
 		}
 		last = now
 		next := takeSnapshot(a.db)
+		if a.ownWrite(3 * watchEvery) { // nlui's own run shows this change itself
+			prev = next
+			continue
+		}
 		d := diffOf(prev, next)
 		out.send(event{Type: "snapshot", Snapshot: next, Diff: &d, Trace: inferTrace(prev, next, d)})
 		prev = next

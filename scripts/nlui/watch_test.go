@@ -119,6 +119,17 @@ func TestWatchStream(t *testing.T) {
 	if ev := next(); ev.Trace == nil || ev.Snapshot.Torn == nil || ev.Trace.Segments[1].Stop != "mid_write" {
 		t.Fatalf("after torn write: %+v", ev.Trace)
 	}
+	a.acquire()                                 // a job of nlui's own: its writes must not be sent
+	db, _ = engine.Open(a.db, engine.Options{}) // recovery cuts the torn tail
+	db.Close()
+	time.Sleep(3 * watchEvery)
+	a.release()
+	time.Sleep(5 * watchEvery)
+	select {
+	case ev := <-events:
+		t.Fatalf("nlui's own write was sent: %+v", ev.Trace)
+	default:
+	}
 	a.shutdown()
 	select {
 	case _, ok := <-events:

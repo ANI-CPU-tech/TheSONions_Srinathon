@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Current PR: A5
+Last updated: 2026-11-06 14:45 IST   Branch: anirudh/L1-harness   Current PR: L1
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -23,16 +23,29 @@ Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Curr
 - A5: `crashpoint.go` real SIGKILL hook, all 13 SPEC names wired (commit a7be212)
 - A5: child-process test kills at every crash point and verifies recovery (commit bd0f7df)
 - A5: 1M-key recovery test (< 2 s) and benchmark (commit 8b6c9ec)
+- A5 merged to `main` (PR #5, merge 1bd0dbe)
+- A6: crash test case after_write/2 (kill after batch WriteAt, before Sync) for row B3 (commit b8ea7f9)
+- A6: crash tests pin the in-flight outcome: absent before/during WriteAt, present after fsync (commit 1e3362f)
+- A6: ARCHITECTURE.md: Mermaid component + recovery diagrams, byte layout, numbered write order, 32-row proof table, three guarantees (commit 4607f79)
+- L1 (taken over from Likith, 2026-11-06 14:23): seeded op stream + tagged values (c4f7e3c), oracle.log (1fd217e), kill/recover loop with open/check/dump and summaries (fc13361), honest fakeserve (9ef96fc), tests (05f7ae4). 8 iterations vs fakeserve: PASS, 9k-42k ops per iteration, 0-1 ops in flight at each kill.
 ## In progress
-- (none) A5 committed locally on `anirudh/A5-crashpoints-bench`, not pushed, no PR yet.
+- (none) A6 and L1 committed locally, not pushed. `anirudh/L1-harness` is branched from the A6 tip: merge A6 first, then L1.
 ## Next
-1. Push `anirudh/A5-crashpoints-bench`, open the A5 PR, merge.
-2. As integrator on `main`: update PROGRESS.md (A1-A4 merged; A5 status).
-3. Tell Likith the crash points are live for the `crashpoints` mode (names and env vars in SPEC section 8; where each one sits is below).
-4. A6: ARCHITECTURE.md (needs A4 and A5 merged).
+1. Push `anirudh/A6-architecture`, open the A6 PR, merge. Then push `anirudh/L1-harness`, open the L1 PR, merge.
+2. L2: verifier (SPEC section 13 rules 4-9) on the in-memory oracle records + base state; fakeserve `--bug=drop-ack|partial-batch|garbage|stale` (read from an env var, since the harness builds fakeserve's argv); failure report with expected vs found.
+3. First real run once Khushi's K2 serve lands: `./bin/torture --seed 1 --iterations 50`.
+4. As integrator on `main`: update PROGRESS.md (A1-A5 merged, A6 and L1 status, torture track now Anirudh's). It still says nothing is merged.
+5. Revisit ARCHITECTURE.md "Verified by" once torture modes run: replace "not verified yet" with mode + seed (A7, B6, D1-D3, F1, F2).
 ## Blockers / needs from others
-- (none)
+- Khushi (K4): `diagrams/architecture.png`, embedded at the top of ARCHITECTURE.md, does not exist yet. Until it lands the image link is broken; the Mermaid in ARCHITECTURE.md is complete on its own.
+- Khushi (K2): real `serve`. Torture is only tested against fakeserve until it lands.
+- Team: TaskSplit.md still lists Likith as owner of `torture/**`, BREAKING.md, docs/SCENARIOS.md. TaskSplit.md is frozen; the ownership change needs a `contract/*` PR approved by all three.
 ## Decisions (and why)
+- Torture: kill delay 1-400 ms, timed from READY, so kills land while both writers are mid-stream (and inside fsyncs), never "after N ops".
+- Torture: the run dir `runs/<seed>/` is wiped at start and the DB carries over between iterations, so `--seed S --iterations N` replays everything up to iteration N.
+- Torture: op ids are iter*10,000,000 + n*2 + (writer-1): unique for the whole run and independent of scheduling, so tags are reproducible too.
+- Torture: a run fails if serve ends any way other than our SIGKILL, or prints a line that answers no op in flight.
+- fakeserve built in L1 (honest only) because K2 serve is not ready and the harness needs an end-to-end test; L2 adds the bugs.
 - Codec functions are exported: tests live in `tests/engine/` (package `engine_test`), which can only see exported names.
 - `MaxRecordPayload = MaxBatchPayload + 4 + MaxBatchOps*7`; `checkBatch` counts key + value bytes against `MaxBatchPayload`.
 - Two error kinds: `ErrTornRecord` (recovery truncates there) vs `ErrCorrupt` (CRC good, payload malformed: writer bug). `Open` refuses `ErrCorrupt` instead of silently dropping records.
@@ -57,6 +70,9 @@ Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Curr
 - Validation runs inside the write lock, matching SPEC section 4 step 1 literally.
 - `ForEachSorted` holds the read lock while calling fn; fn must not call back into the DB.
 - New file SeqBase = 1, so the first record gets seq 1.
+- ARCHITECTURE.md cites file + function, never line numbers, so rows stay true when code moves.
+- Proof table says "not verified" wherever only a test without a kill, or no test, exists (C6, D2, D4, header-only F4). A wrong claim costs more than a missing one.
+- Known edge, not fixed: a header-only file (24 bytes) cut to 23 by hand fails Open with ErrNotNineLives (F4 row says so).
 ## Measurements
 - F3 recovery, 1M keys as 1M separate PUT records (11-byte keys, 100-byte values, 127 MB): open 376 ms on tmpfs, 416 ms on NVMe (`/home`). Warm page cache in both (file just written); cold cache not measured (needs root to drop caches). Benchmark: about 408 ms/op, 2.0M allocs/op.
 - 1M puts + 1M deletes as 10,000-op batches, then Compact: about 2 s total; file 23 MB after the puts, 24 bytes (header only) at the end.

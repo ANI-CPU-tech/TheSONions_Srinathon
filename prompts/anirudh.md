@@ -122,3 +122,10 @@ How do i test the entire thing? How do i run the CLI and test it? Gimme all the 
 
 ### 2026-11-06 16:43 (local time) | Tool: Claude Code | Branch: main
 Instead of me running all these commands manually create a CLI interface like Gemini CLI where i can select the commands using autofill instead of me manually typing them.
+
+### 2026-11-06 16:58 (local time) | Tool: Claude Code | Branch: anirudh/X1-test-shell
+How do i test it now???
+
+[Image #2]
+
+Help me with the commands, what are the exact steps

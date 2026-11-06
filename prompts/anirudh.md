@@ -355,3 +355,7 @@ ok lets go with the watch mode approach then
 
 ### 2026-11-06 23:34 (local time) | Tool: Claude Code | Branch: anirudh/X3-watch
 push both and give me a PR desc (dont add urself as a contributor)
+
+### 2026-11-06 23:40 (local time) | Tool: Claude Code | Branch: main
+[Image #10: screenshot of nlui running from main, Disk card with the watch terminal commands switch]
+what do i do? do i run the CLI in another terminal??? and then check?

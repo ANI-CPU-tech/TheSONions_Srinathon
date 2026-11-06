@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(static))
 	mux.HandleFunc("GET /api/state", a.handleState)
+	mux.HandleFunc("GET /api/bytes", a.handleBytes)
 	return a.guard(mux)
 }
 
@@ -121,7 +123,8 @@ type binInfo struct {
 	When  string `json:"when,omitempty"`
 }
 
-// handleState is the top bar: paths, built binaries, busy flag.
+// handleState is the top bar (paths, built binaries, busy flag) and the
+// Disk panel (a read-only snapshot of the demo database).
 func (a *app) handleState(w http.ResponseWriter, r *http.Request) {
 	var bins []binInfo
 	for _, b := range []string{"bin/ninelives", "bin/torture", "bin/fakeserve"} {
@@ -133,7 +136,25 @@ func (a *app) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"root": a.root, "dir": a.dir, "db": a.db, "bins": bins, "busy": len(a.slot) > 0,
+		"snapshot": takeSnapshot(a.db),
 	})
+}
+
+// handleBytes serves ?off=&len= bytes of the demo database as hex, for the
+// record inspector.
+func (a *app) handleBytes(w http.ResponseWriter, r *http.Request) {
+	off, err1 := strconv.ParseInt(r.URL.Query().Get("off"), 10, 64)
+	n, err2 := strconv.ParseInt(r.URL.Query().Get("len"), 10, 64)
+	if err1 != nil || err2 != nil {
+		writeErr(w, http.StatusBadRequest, "off and len must be integers")
+		return
+	}
+	h, err := readHex(a.db, off, n)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"off": off, "hex": h})
 }
 
 // writeJSON sends v as the whole response.

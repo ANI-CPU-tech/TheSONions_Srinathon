@@ -116,3 +116,6 @@ is the integration task done now? (Just asking a question)
 
 ### 2026-11-06 16:35 (local time) | Tool: Claude Code | Branch: main
 So is the building part completely done? (Just asking a question)
+
+### 2026-11-06 16:36 (local time) | Tool: Claude Code | Branch: main
+How do i test the entire thing? How do i run the CLI and test it? Gimme all the commands and the extact the flow to test everything that we have built so far!

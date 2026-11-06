@@ -88,26 +88,30 @@ func TestCrashPoints(t *testing.T) {
 	if testing.Short() {
 		t.Skip("spawns child processes")
 	}
+	// inFlight: "absent" if the killed step must not show (nothing or only a
+	// torn prefix reached the file), "present" if it must (its record was
+	// fsynced), "" if either is allowed.
 	cases := []struct {
-		name  string
-		after string // NINELIVES_CRASH_AFTER
+		name     string
+		after    string // NINELIVES_CRASH_AFTER
+		inFlight string
 	}{
-		{"before_write", ""},
-		{"mid_write", ""},
-		{"after_write", ""},
-		{"after_write", "2"}, // batch written, not fsynced, step 1 (B3)
-		{"after_fsync", ""},
-		{"after_fsync", "3"}, // dies inside the delete, step 2
-		{"after_index", ""},
-		{"batch_mid_write", ""},
-		{"recovery_mid_scan", ""},
-		{"recovery_mid_scan", "2"},
-		{"recovery_before_truncate", ""},
-		{"recovery_after_truncate", ""},
-		{"compact_mid_temp", ""},
-		{"compact_after_temp_fsync", ""},
-		{"compact_after_rename", ""},
-		{"compact_after_dir_fsync", ""},
+		{"before_write", "", "absent"},
+		{"mid_write", "", "absent"},
+		{"after_write", "", ""},
+		{"after_write", "2", ""}, // batch written, not fsynced, step 1 (B3)
+		{"after_fsync", "", "present"},
+		{"after_fsync", "3", "present"}, // dies inside the delete, step 2
+		{"after_index", "", "present"},
+		{"batch_mid_write", "", "absent"},
+		{"recovery_mid_scan", "", ""},
+		{"recovery_mid_scan", "2", ""},
+		{"recovery_before_truncate", "", ""},
+		{"recovery_after_truncate", "", ""},
+		{"compact_mid_temp", "", ""},
+		{"compact_after_temp_fsync", "", ""},
+		{"compact_after_rename", "", ""},
+		{"compact_after_dir_fsync", "", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+"/"+tc.after, func(t *testing.T) {
@@ -135,6 +139,12 @@ func TestCrashPoints(t *testing.T) {
 			got := state(t, db)
 			if !sameState(got, want) && !sameState(got, withInFlight) {
 				t.Fatalf("after kill at %s (acked %d steps): state %v, want %v or %v", tc.name, acked, got, want, withInFlight)
+			}
+			if tc.inFlight == "absent" && !sameState(got, want) {
+				t.Fatalf("after kill at %s: in-flight step applied, state %v, want %v", tc.name, got, want)
+			}
+			if tc.inFlight == "present" && !sameState(got, withInFlight) {
+				t.Fatalf("after kill at %s: fsynced in-flight step lost, state %v, want %v", tc.name, got, withInFlight)
 			}
 			if err := engine.Check(path); err != nil {
 				t.Fatalf("Check after reopen: %v", err)

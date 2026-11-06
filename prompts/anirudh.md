@@ -101,3 +101,6 @@ have u finished L4 and L5? are everyone's tasks done now? Anirudh, Likith, Khush
 
 ### 2026-11-06 16:19 (local time) | Tool: Claude Code | Branch: anirudh/L4-L5-modes-docs
 Commit all the changes into into the branch. (or is it already comitted?)
+
+### 2026-11-06 16:21 (local time) | Tool: Claude Code | Branch: anirudh/L4-L5-modes-docs
+gimme a desc for the PR keep it fairly human and simple

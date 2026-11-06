@@ -1,1 +1,30 @@
-%% TODO(Khushi, PR K4): numbered write order, docs/SPEC.md section 4
+%% Write path - the exact numbered order of SPEC section 4.
+%% Each disk-changing step carries its CRASH comment from src/engine/write.go.
+%% Owner: Khushi (PR K4).
+flowchart TD
+    IN["put / delete / batch<br/>TAKE THE GLOBAL WRITE LOCK"] --> S1
+
+    S1["STEP 1 - Validate sizes<br/>errors: ErrKeyTooLarge, ErrEmptyKey, ErrValueTooLarge, ErrBatchTooLarge<br/>an empty batch is a successful no-op that writes NOTHING"] --> S2
+
+    S2{"STEP 2 - Disk-full guard<br/>put / batch: size + recordLen &lt;= max_bytes - DeleteReserve<br/>delete: size + recordLen &lt;= max_bytes<br/>max_bytes = 0 means unlimited"}
+    S2 -->|"fits"| S3
+    S2 -->|"does not fit"| DEAD{"dead bytes &gt; 0?"}
+    DEAD -->|"yes"| RETRY["run compaction once, then recheck"]
+    RETRY --> S2
+    DEAD -->|"no"| FULL["return ErrDiskFull - NOTHING has been written"]
+
+    S3["STEP 3 - Encode the whole record into ONE buffer,<br/>seq = nextSeq<br/>encoding touches no disk, so it is always safe"]
+    S3 --> S4{"STEP 4 - file.WriteAt(buf, size)<br/>one single call<br/>// CRASH: partial record on disk at this point"}
+    S4 -->|"error"| FAIL["file.Truncate(size) + file.Sync()<br/>// CRASH: truncate redone by the next open (idempotent)<br/>if truncate fails: ErrFailed until the DB is reopened<br/>never append after unknown bytes"]
+    S4 -->|"written"| S5{"STEP 5 - file.Sync()<br/>// CRASH: record on disk but not yet durable"}
+    S5 -->|"error"| FAIL
+    S5 -->|"durable"| S6
+
+    S6["STEP 6 - Update the in-memory index and dead-byte accounting,<br/>size += len(buf), nextSeq++<br/>// CRASH: record durable and logged, index rebuilt on next open"]
+    S6 --> S7["STEP 7 - Release the lock, return seq<br/>serve prints ACK &lt;opid&gt; &lt;seq&gt; HERE:<br/>only after WriteAt + Sync succeeded"]
+
+    S7 --> OUT["Acked writes can never be lost.<br/>get takes the READ lock: index lookup + ReadAt,<br/>so it sees the state before or after a batch, never between."]
+
+    style FULL fill:#ffd9d9
+    style FAIL fill:#ffd9d9
+    style S7 fill:#d9f7d9

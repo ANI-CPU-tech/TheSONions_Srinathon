@@ -1,1 +1,36 @@
-%% TODO(Khushi, PR K4): all components, file layout, write order, recovery flow, locks
+%% NineLives architecture - every component plus the global lock.
+%% Matches docs/SPEC.md sections 1 and 4-7. Owner: Khushi (PR K4).
+flowchart TD
+    subgraph clients["Clients (SPEC sections 10-12)"]
+        CLI["CLI: open, put, get, del, batch,<br/>dump, check, compact<br/>--max-bytes, exit codes 0 / 1 / 2 / 3"]
+        SERVE["serve: one goroutine per writer queue,<br/>stdout mutex, 4 MiB lines<br/>READY / ACK / VAL / NOTFOUND / STATS / ERR<br/>ACK printed only after fsync"]
+        TORT["torture (Likith): spawns serve,<br/>SIGKILL at random ms, oracle.log"]
+    end
+
+    subgraph engine["Engine: package src/engine, one process, one log file"]
+        direction TB
+        LOCK{{"GLOBAL sync.RWMutex<br/>write side held for the WHOLE put / delete / batch / compact<br/>read side for get / dump / stats - a reader never sees half a batch"}}
+        WP["Write path (SPEC 4): 1 validate sizes,<br/>2 disk-full guard, 3 encode record + seq,<br/>4 WriteAt, 5 Sync, 6 index + dead bytes, 7 return seq"]
+        DFG["Disk-full guard: size + recordLen &lt;= max_bytes - DeleteReserve<br/>(deletes may use the reserve); compact once and retry,<br/>else ErrDiskFull and NOTHING was written"]
+        RP["Read path (get): index lookup + ReadAt under RLock"]
+        IDX[("In-memory hash index<br/>key -&gt; offset, length, seq<br/>values are never copied")]
+        LOG[("Append-only log file = the database<br/>24-byte header + records<br/>CRC32-C is the commit marker")]
+        REC["Recovery / Open (SPEC 6): scan records,<br/>verify CRC, truncate a torn tail (idempotent),<br/>rebuild index, nextSeq = max(SeqBase, maxSeq+1)"]
+        CMP["Compaction (SPEC 7): temp file, live keys only,<br/>fsync, atomic rename, dir fsync, swap handles<br/>trigger: auto / disk-full guard / compact command"]
+    end
+
+    CLI -->|"argv / stdout"| LOCK
+    TORT -->|"spawns and SIGKILLs"| SERVE
+    SERVE -->|"stdin requests"| LOCK
+    LOCK --> WP
+    WP --> DFG
+    DFG -->|"fits after guard"| LOG
+    DFG -->|"no room and dead bytes &gt; 0"| CMP
+    LOCK --> RP
+    RP --> IDX
+    IDX -.->|"offsets + lengths"| RP
+    WP -.->|"step 6, after Sync"| IDX
+    LOG -.->|"scan on open"| REC
+    REC --> IDX
+    CMP -->|"new compact file"| LOG
+    LOG -->|"file header + live keys"| CMP

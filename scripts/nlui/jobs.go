@@ -53,20 +53,21 @@ type job struct {
 
 // event is one NDJSON line of a job's stream.
 type event struct {
-	Type     string      `json:"type"` // job, step, out, exit, snapshot, trace, torture, done
-	Step     int         `json:"step,omitempty"`
-	Count    int         `json:"count,omitempty"`
-	Title    string      `json:"title,omitempty"`
-	Cmd      string      `json:"cmd,omitempty"`
-	Stream   string      `json:"stream,omitempty"`
-	Text     string      `json:"text,omitempty"`
-	OK       bool        `json:"ok,omitempty"`
-	Exit     *exitInfo   `json:"exit,omitempty"`
-	Snapshot *snapshot   `json:"snapshot,omitempty"`
-	Diff     *diffView   `json:"diff,omitempty"`
-	Trace    *traceView  `json:"trace,omitempty"`
-	Req      *serveReq   `json:"req,omitempty"`
-	Reqs     []*serveReq `json:"reqs,omitempty"`
+	Type     string       `json:"type"` // job, step, out, exit, snapshot, trace, torture, done
+	Step     int          `json:"step,omitempty"`
+	Count    int          `json:"count,omitempty"`
+	Title    string       `json:"title,omitempty"`
+	Cmd      string       `json:"cmd,omitempty"`
+	Stream   string       `json:"stream,omitempty"`
+	Text     string       `json:"text,omitempty"`
+	OK       bool         `json:"ok,omitempty"`
+	Exit     *exitInfo    `json:"exit,omitempty"`
+	Snapshot *snapshot    `json:"snapshot,omitempty"`
+	Diff     *diffView    `json:"diff,omitempty"`
+	Trace    *traceView   `json:"trace,omitempty"`
+	Req      *serveReq    `json:"req,omitempty"`
+	Reqs     []*serveReq  `json:"reqs,omitempty"`
+	Torture  *tortureLine `json:"torture,omitempty"`
 }
 
 // exitInfo is how one step ended.
@@ -114,6 +115,11 @@ func (a *app) runJob(ctx context.Context, j job, out *stream) bool {
 		out.send(event{Type: "step", Step: n, Title: s.Title, Cmd: s.display(a.root)})
 		ex, tail := a.runStep(ctx, s, func(stream, line string) {
 			out.send(event{Type: "out", Step: n, Stream: stream, Text: line})
+			if j.Torture && stream == "stdout" {
+				if tl := parseTorture(line); tl != nil {
+					out.send(event{Type: "torture", Step: n, Torture: tl})
+				}
+			}
 		})
 		out.send(event{Type: "exit", Step: n, Exit: &ex})
 		if j.Snap {

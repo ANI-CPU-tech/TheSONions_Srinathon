@@ -382,3 +382,15 @@ Just asking a question (dont build anything)
 
 ### 2026-11-07 00:08 (local time) | Tool: Claude Code | Branch: main
 push all the commits to main but dont add urself as a contributor
+
+### 2026-11-07 00:12 (local time) | Tool: Claude Code | Branch: main
+<pasted text>
+# terminal 1: the window, watching nlshell's database
+go build -o bin/nlui ./scripts/nlui && ./bin/nlui --dir /tmp/nl
+
+# terminal 2: the CLI menu
+go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell
+</pasted text>
+
+
+add these to commands into TESTING.md too, commit and push it into main (dont add urself as a contributor)

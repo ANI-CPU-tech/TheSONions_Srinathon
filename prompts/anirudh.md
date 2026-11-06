@@ -316,3 +316,6 @@ Simulation: Real run + step animation (Recommended)
 Panels: CLI commands, Serve + kill, Crash-point lab, Torture + tests
 Placement: Part of the judged demo
 (then approved the plan)
+
+### 2026-11-06 23:15 (local time) | Tool: Claude Code | Branch: anirudh/X2-ui
+Gimme a desc for the PR keep it fairly human and simple.

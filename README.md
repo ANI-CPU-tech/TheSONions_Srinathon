@@ -398,10 +398,9 @@ These supplement, never replace, random kills.
 ```console
 $ ./bin/torture --iterations 3 --seed 12345
 torture: seed=12345 mode=default iterations=3, oracle log runs/12345/oracle.log
-torture: checks recovery health (open exit 0, check OK, dump parses); dump-vs-oracle verification lands in PR L2
-iter 1/3 ok  delay=86ms sent=50 acked=48 err=0 inflight=2 keys=48 recovery_ms=0
-iter 2/3 ok  delay=249ms sent=152 acked=150 err=0 inflight=2 keys=53 recovery_ms=0
-iter 3/3 ok  delay=92ms sent=58 acked=57 err=0 inflight=1 keys=48 recovery_ms=0
+iter 1/3 ok  delay=86ms sent=61 acked=59 err=0 inflight=2 keys=50 recovery_ms=0
+iter 2/3 ok  delay=249ms sent=167 acked=165 err=0 inflight=2 keys=51 recovery_ms=0
+iter 3/3 ok  delay=92ms sent=59 acked=57 err=0 inflight=2 keys=48 recovery_ms=0
 PASS 3/3 iterations (seed 12345, mode default)
 ```
 
@@ -409,17 +408,25 @@ PASS 3/3 iterations (seed 12345, mode default)
 |---|---|
 | `--seed <n>` | **mandatory**; every random decision derives from it |
 | `--iterations <n>` | kill/restart loops (default 500) |
-| `--mode <m>` | `default` today; `large-values`, `large-batch`, `disk-full`, `recovery-crash`, `compaction`, `crashpoints` land in PRs L3/L4 |
+| `--mode <m>` | `default`, `large-values`, `large-batch`, `disk-full` are implemented; `recovery-crash`, `compaction`, `crashpoints` land in PR L4 and currently exit 2 with an explicit "not wired up yet" message |
 | `--bin <path>` | the `ninelives` binary (default `./bin/ninelives`) |
 | `--dir <path>` | where `runs/<seed>/` databases and `oracle.log` go (default `runs/`) |
 | `--max-bytes <n>` | forwarded to serve |
 
 Each iteration: spawn `serve`, drive it with **two synchronous writers**,
 SIGKILL at a genuinely random millisecond delay, then `open`, `check`, `dump`
-and summarise in one line (your `delay=` values will differ every run — that
-is the point). `runs/<seed>/oracle.log` records what was sent and
-what was acked — independently of the database. Full mode list and oracle
-rules: [docs/SCENARIOS.md](docs/SCENARIOS.md) and SPEC §13.
+and **verify the dump against the oracle log** (the SPEC §13 rules: every
+acked write present, batches all-or-nothing, no unknown values) before the
+one-line summary. `PASS n/n` means every acked write survived every kill.
+
+Reproducibility: the same `--seed` reproduces the operation stream and the
+kill delays (the block above came out byte-identical on a second run with
+seed 12345), but OS scheduling decides how far each writer gets before the
+SIGKILL — so `sent`/`acked`/`keys` vary from run to run. That is expected
+and documented (SPEC §13 rule 10), not a bug. `runs/<seed>/oracle.log`
+records what was sent and what was acked — independently of the database.
+Full mode list and oracle rules: [docs/SCENARIOS.md](docs/SCENARIOS.md)
+and SPEC §13.
 
 ## Repository layout
 

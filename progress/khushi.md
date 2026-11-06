@@ -10,11 +10,14 @@ Last updated: 2026-11-06 15:04 IST   Branch: khushi   Current PR: K3 (all tasks 
 - Merged `origin/main` into `khushi` (commit df53fa6, pushed): A4 compaction, A5 crash points, A6 ARCHITECTURE, L1 torture all landed — `compact` now prints `OK` (measured 151703 → 29024 bytes, check OK) and TestCompact exercises the real path; ARCHITECTURE.md embeds `diagrams/architecture.png`, paths match.
 - K5: full README (commit de798f2): build, tour, every command + exit codes, batch/B5, tokens, serve protocol, on-disk format with a hex dump whose 3 CRC32-C values were **recomputed with hash/crc32.Castagnoli** (054fdedf / c73c2871 / e3129ac9 — all match), recovery in plain English, write path, disk-full, compaction (measured), crash points (verified: NINELIVES_CRASH_AT=after_fsync really SIGKILLs, exit 137, write survives), torture quickstart from a real run (PASS 3/3 seed 12345), repo layout, honest platform notes. Embedded diagrams: file-layout, write-path, recovery.
 - K5 acceptance test: `/tmp/opencode/readme_check.sh` re-executed every README block from clean state and diffed — **32/32 PASS** after fixing 2 real README issues found this way (recovery_ms variability now documented; usage-block elision shown after token error) plus my checker's own 2 bugs. Full suite re-run after merge: gofmt/vet/build/test all green (engine 7.6s, cli 2.1s, torture 1.5s).
+- K5 pushed on human instruction (through 23c9e62).
+- Post-L2/L3 integration (next task after K5): merged `origin/main` PR #8 (L2 oracle verifier + L3 modes) into `khushi`, re-captured the torture section — the old "verification lands in PR L2" banner is gone (the verifier now runs every iteration), L3 modes `large-values|large-batch|disk-full` are live, L4 modes exit 2 with an explicit message; fixed a wrong README claim (same seed reproduces **delays** byte-identically — verified twice with seed 12345: 86/249/92 ms both runs — while `sent`/`acked` vary with scheduling, per SPEC §13 rule 10). README self-test re-run: **32/32 PASS**; full suite green (engine 7.7s, cli 2.2s, torture 3.4s).
 ## In progress
-- (none — ALL of K1–K5 complete; paused for human review before any push of K5)
+- (none — ALL of K1–K5 complete and pushed; post-L2/L3 README refresh committed locally, awaiting human's push word)
 ## Next
-1. On human instruction: push `khushi` (K5 commits) and/or open the PR `khushi` → `main` for Anirudh to review.
-2. If judges want more: K1–K5 re-verification after any teammate merge; macOS run if a Mac becomes available.
+1. On human instruction: push the README refresh and/or open the PR `khushi` → `main`.
+2. Keep syncing with `main` before docs freeze (hour 20): L4 modes and Likith's BREAKING.md/SCENARIOS are still landing; README torture section may need one more refresh when L4 lands.
+3. Cross-training prep (TaskSplit §6): crash-here answers — `progress/khushi.md` Notes section has the ACK/EOF/enqueue kill points.
 ## Blockers / needs from others
 - Anirudh: `engine.Compact()` still `ErrNotImplemented` (A4 pending) → CLI `compact` exits 1 (tested tolerantly: TestCompact accepts OK once A4 lands), serve `compact` op → `ERR … BADREQ`.
 - Likith: torture still a scaffold; serve + CLI ready to be driven.

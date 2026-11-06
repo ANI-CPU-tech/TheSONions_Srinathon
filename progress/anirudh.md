@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 13:07 IST   Branch: anirudh/A4-compaction   Current PR: A4
+Last updated: 2026-11-06 13:22 IST   Branch: anirudh/A5-crashpoints-bench   Current PR: A5
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -19,12 +19,17 @@ Last updated: 2026-11-06 13:07 IST   Branch: anirudh/A4-compaction   Current PR:
 - A4: disk-full guard compacts once and rechecks, E5 (commit 9b3d149)
 - A4: auto-compaction trigger after writes; 1M puts + 1M deletes shrink to header only (commit bbb4264)
 - A4 tests in `tests/engine/compact_test.go` + E5 in `diskfull_test.go`. `go test ./...` and `-race -short` green.
+- A4 merged to `main` (PR #4, merge 563a98f)
+- A5: `crashpoint.go` real SIGKILL hook, all 13 SPEC names wired (commit a7be212)
+- A5: child-process test kills at every crash point and verifies recovery (commit bd0f7df)
+- A5: 1M-key recovery test (< 2 s) and benchmark (commit 8b6c9ec)
 ## In progress
-- (none) A4 committed locally on `anirudh/A4-compaction`, not pushed, no PR yet.
+- (none) A5 committed locally on `anirudh/A5-crashpoints-bench`, not pushed, no PR yet.
 ## Next
-1. Push `anirudh/A4-compaction`, open the A4 PR, merge.
-2. As integrator on `main`: update PROGRESS.md (A1-A3 merged; A4 status).
-3. A5: wire the 13 crash points in `crashpoint.go` (real SIGKILL, NINELIVES_CRASH_AT/AFTER) and the 1M-key recovery benchmark with individual puts.
+1. Push `anirudh/A5-crashpoints-bench`, open the A5 PR, merge.
+2. As integrator on `main`: update PROGRESS.md (A1-A4 merged; A5 status).
+3. Tell Likith the crash points are live for the `crashpoints` mode (names and env vars in SPEC section 8; where each one sits is below).
+4. A6: ARCHITECTURE.md (needs A4 and A5 merged).
 ## Blockers / needs from others
 - (none)
 ## Decisions (and why)
@@ -41,17 +46,25 @@ Last updated: 2026-11-06 13:07 IST   Branch: anirudh/A4-compaction   Current PR:
 - Directory fsync failure after the compaction rename sets the failed state: the rename may not be durable, so stop taking writes.
 - Compacted records keep each key's original seq; header SeqBase = nextSeq so seqs never go backwards even after trailing deletes are dropped.
 - E4: compacted file is checked against MaxBytes (no reserve) while writing; over it, abort with ErrDiskFull, remove the temp file, old file untouched. A put inside a batch costs 7 framing bytes but 23 as a standalone PUT, so compaction can grow a file of big batches.
+- Crash-point env vars are read once at start-up (package vars), so an unarmed hook is one string compare. The hit counter is atomic.
+- `mid_write` / `batch_mid_write` write the first half of the record with WriteAt, then die. `batch_mid_write` only counts batch records.
+- `recovery_mid_scan` fires before applying each record, so NINELIVES_CRASH_AFTER=N dies before record N is applied.
+- `compact_mid_temp` flushes the first half of the live keys to `<path>.compact`, then dies (needs at least one live key).
+- `recovery_after_truncate` sits after Truncate, before its Sync.
+- The 1M benchmark builds the file from encoded PUT records instead of calling Put 1M times: identical bytes, no 1M fsyncs.
 - Auto-compaction errors are dropped: the write that triggered it is already durable. No back-off yet (shortcut comment in `maybeCompact`).
 - Empty batch: writes nothing, returns seq 0. Delete of a missing key still writes a DEL record (each acked delete has its own seq).
 - Validation runs inside the write lock, matching SPEC section 4 step 1 literally.
 - `ForEachSorted` holds the read lock while calling fn; fn must not call back into the DB.
 - New file SeqBase = 1, so the first record gets seq 1.
 ## Measurements
+- F3 recovery, 1M keys as 1M separate PUT records (11-byte keys, 100-byte values, 127 MB): open 376 ms on tmpfs, 416 ms on NVMe (`/home`). Warm page cache in both (file just written); cold cache not measured (needs root to drop caches). Benchmark: about 408 ms/op, 2.0M allocs/op.
 - 1M puts + 1M deletes as 10,000-op batches, then Compact: about 2 s total; file 23 MB after the puts, 24 bytes (header only) at the end.
 - Recovery, 1M keys (~11-byte keys, ~17-byte values, written as 100 batches of 10,000, file 35 MB): open = 359 ms on this laptop. Throwaway test, not committed; the real benchmark (individual puts) is A5.
 ## Bugs found by torture
 - (none yet)
 ## Notes for crash-here prep
+- Crash points, in code order: write.go `commit`: before_write, mid_write / batch_mid_write, after_write, after_fsync, after_index. recover.go: recovery_mid_scan (in `recoverLog`), recovery_before_truncate and recovery_after_truncate (in `truncateTail`). compact.go: compact_mid_temp (in `copyLive`), compact_after_temp_fsync, compact_after_rename, compact_after_dir_fsync (in `compactLocked`). `tests/engine/crashpoint_test.go` kills a real child at each one.
 - `commit` (write.go): killed before WriteAt: nothing on disk, op absent (never acked). Killed during/after WriteAt, before Sync: record or a prefix is in the page cache; open() applies it if complete with a good CRC (in flight, allowed), else truncates it. Killed after Sync, before ACK: record durable, open() applies it (in flight, allowed).
 - `fail` (diskfull.go): killed before or after the Truncate: the file may end in a partial record past the last committed size. It was never acked; open() truncates it as a torn tail (or applies it if complete: allowed, it was in flight).
 - `writeCompactFile` (compact.go): killed while writing or before fsync of `<path>.compact`: old `<path>` untouched and authoritative; open() deletes the temp file (C3).

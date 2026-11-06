@@ -19,6 +19,19 @@ func (db *DB) Compact() error {
 	return db.compactLocked()
 }
 
+// maybeCompact is the automatic trigger, run after each successful write:
+// compact when the file is at least CompactMinFile and more than
+// CompactDeadRatio of it is dead. The write is already durable, so a failed
+// compaction is not that write's error: the old file stays in use, or, if
+// compaction put the DB in the failed state, the next write says so.
+// shortcut: no back-off, so if compaction keeps failing (E4 on a file over
+// 4 MiB) every write retries it; add a back-off if torture shows this.
+func (db *DB) maybeCompact() {
+	if db.size >= CompactMinFile && float64(db.deadBytes()) > CompactDeadRatio*float64(db.size) {
+		_ = db.compactLocked() // see above for why the error is dropped
+	}
+}
+
 // compactLocked runs the whole compaction. Caller holds the write lock.
 // Until the rename the old file is untouched and authoritative; after it
 // the new file is complete because it was fsynced first.

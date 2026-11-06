@@ -142,3 +142,74 @@ func TestCompactOnClosedDB(t *testing.T) {
 		t.Fatalf("err = %v, want ErrClosed", err)
 	}
 }
+
+// A file of at least CompactMinFile with more than half dead bytes is
+// compacted automatically after a write.
+func TestAutoCompaction(t *testing.T) {
+	db, path := newDB(t)
+	big := make([]byte, engine.MaxValueSize)
+	for i := 0; i < 6; i++ {
+		big[0] = byte(i)
+		if _, err := db.Put([]byte("k"), big); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Without compaction the file would hold 6 values. Put 4 crosses
+	// CompactMinFile with 3 of 4 values dead, so it compacts to one value;
+	// puts 5 and 6 then grow it to 3 values, still under the trigger size.
+	s := db.Stats()
+	if s.FileBytes >= engine.CompactMinFile || s.FileBytes != fileSize(t, path) {
+		t.Fatalf("stats %+v, file %d: want auto-compacted below %d", s, fileSize(t, path), engine.CompactMinFile)
+	}
+	if v, _, _ := db.Get([]byte("k")); len(v) != engine.MaxValueSize || v[0] != 5 {
+		t.Fatal("latest value lost by auto-compaction")
+	}
+}
+
+// Small files are never auto-compacted, however much of them is dead.
+func TestNoAutoCompactionBelowMinFile(t *testing.T) {
+	db, _ := newDB(t)
+	for i := 0; i < 100; i++ {
+		db.Put([]byte("k"), []byte(fmt.Sprint(i)))
+	}
+	if s := db.Stats(); s.DeadBytes == 0 {
+		t.Fatalf("small file was compacted: %+v", s)
+	}
+}
+
+// TaskSplit A4 acceptance: after 1M puts and 1M deletes the file shrinks.
+// Written as batches of 10,000 so the test does not wait on 2M fsyncs.
+func TestMillionPutsThenDeletesShrinks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow")
+	}
+	db, path := newDB(t)
+	const n, batch = 1_000_000, 10_000
+	ops := make([]engine.Op, batch)
+	for kind := range []engine.OpKind{engine.OpPut, engine.OpDel} {
+		for b := 0; b < n/batch; b++ {
+			for i := range ops {
+				ops[i] = engine.Op{Kind: engine.OpKind(kind + 1), Key: []byte(fmt.Sprintf("key-%07d", b*batch+i)), Value: []byte("value")}
+			}
+			if _, err := db.Batch(ops); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if kind == 0 {
+			if s := db.Stats(); s.Keys != n {
+				t.Fatalf("after puts: %+v", s)
+			}
+			t.Logf("after 1M puts: %d bytes", fileSize(t, path))
+		}
+	}
+	if err := db.Compact(); err != nil {
+		t.Fatal(err)
+	}
+	if s := db.Stats(); s.Keys != 0 || s.FileBytes != engine.FileHeaderSize || fileSize(t, path) != engine.FileHeaderSize {
+		t.Fatalf("after deletes + compact: %+v, file %d", s, fileSize(t, path))
+	}
+	db.Close()
+	if s := mustOpen(t, path).Stats(); s.Keys != 0 || s.NextSeq != 2*n/batch+1 {
+		t.Fatalf("after reopen: %+v", s)
+	}
+}

@@ -1,0 +1,15 @@
+# Build output
+bin/
+*.test
+
+# Torture runs and database files
+runs/
+*.db
+*.db.compact
+*.db.init
+
+# Editor / OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

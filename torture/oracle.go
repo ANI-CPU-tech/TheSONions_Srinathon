@@ -39,6 +39,8 @@ type oracle struct {
 	w     *bufio.Writer
 	recs  map[uint64]*record
 	order []*record // in send order
+
+	allowDiskFull bool // ERR DISKFULL is a valid reply (a --max-bytes cap is set)
 }
 
 func openOracle(path string) (*oracle, error) {
@@ -89,6 +91,9 @@ func (o *oracle) reply(opid uint64, line string) error {
 		rec.status, rec.seq = acked, seq
 		fmt.Fprintf(o.w, "ACK %d %d %d\n", o.now(), opid, seq)
 	case len(f) >= 3 && f[0] == "ERR":
+		if f[2] != "DISKFULL" || !o.allowDiskFull {
+			return fmt.Errorf("op %d refused: %q (the stream only sends valid ops, so only DISKFULL under --max-bytes is expected)", opid, line)
+		}
 		rec.status, rec.code = refused, f[2]
 		fmt.Fprintf(o.w, "ERR %d %d %s\n", o.now(), opid, f[2])
 	default:
@@ -97,10 +102,15 @@ func (o *oracle) reply(opid uint64, line string) error {
 	return nil
 }
 
-// killed logs the moment the tool sent SIGKILL.
-func (o *oracle) killed() {
+// killed logs the moment the tool sent SIGKILL, or, with self, the moment
+// it saw serve already dead from an armed crash point.
+func (o *oracle) killed(self bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if self {
+		fmt.Fprintf(o.w, "KILL %d self (crash point)\n", o.now())
+		return
+	}
 	fmt.Fprintf(o.w, "KILL %d\n", o.now())
 }
 

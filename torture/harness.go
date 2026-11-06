@@ -59,43 +59,84 @@ type result struct {
 	sent, acked, errs, flight int
 	keys                      int
 	recoveryMS                string
+	openTime                  time.Duration     // wall time of the full open(), process start included
+	note                      string            // mode detail: crash point, recovery kills, compaction kill
 	state                     map[string]string // the dump after recovery
 }
 
 // runIteration runs one kill/recover cycle. Its random choices come only
 // from (seed, iter), so a seed reproduces the op streams and the delay.
-func runIteration(c config, o *oracle, iter int) (result, error) {
+// openTime is the previous iteration's full open() time (recovery-crash
+// kills land inside a window that long).
+func runIteration(c config, o *oracle, iter int, openTime time.Duration) (result, error) {
 	rng := rand.New(rand.NewPCG(uint64(c.seed), uint64(iter)*16))
 	res := result{iter: iter, delay: time.Duration(1+rng.IntN(maxDelayMS)) * time.Millisecond}
+	p := newKillPlan(c.mode, iter, rng)
 	o.beginIteration(iter, res.delay)
-	err := runAndKill(c, o, iter, res.delay)
+	if plan := p.String(); plan != "" {
+		o.note("PLAN %s", plan)
+	}
+	self, err := runAndKill(c, o, iter, res.delay, p)
 	res.sent, res.acked, res.errs, res.flight = o.counts()
+	res.note = p.String()
+	if p.serveEnv != nil {
+		res.note += map[bool]string{true: " hit", false: " missed"}[self]
+	}
 	if err != nil {
 		return res, err
 	}
-	res.state, res.recoveryMS, err = recoverAndDump(c)
+	rec, err := killRecoveries(c, o, p, openTime)
+	res.note += rec
+	if err != nil {
+		return res, err
+	}
+	res.state, res.recoveryMS, res.openTime, err = recoverAndDump(c)
 	res.keys = len(res.state)
 	return res, err
 }
 
-// runAndKill starts serve, runs the writers and SIGKILLs serve after delay.
-func runAndKill(c config, o *oracle, iter int, delay time.Duration) error {
-	s, err := startServe(c, o)
+// runAndKill starts serve, runs the writers and SIGKILLs serve after delay,
+// or earlier if the plan says so. self reports that serve died before our
+// kill, which only an armed crash point may cause; wait checks it was SIGKILL.
+func runAndKill(c config, o *oracle, iter int, delay time.Duration, p killPlan) (self bool, err error) {
+	s, err := startServe(c, o, p.serveEnv)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var wg sync.WaitGroup
 	for w := 1; w <= writers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.runWriter(newGenerator(c.seed, iter, w, c.mode, diskFullBytes(c.mode, c.maxBytes)))
+			s.runWriter(newGenerator(c.seed, iter, w, c.mode))
 		}()
 	}
-	time.Sleep(delay) // the writers are mid-stream: the kill lands during ops
-	s.kill()
+	self = s.waitForKill(delay, p) // the writers are mid-stream: the kill lands during ops
+	s.kill(self)
 	wg.Wait()
-	return s.wait()
+	return self, s.wait()
+}
+
+// waitForKill blocks until it is time to kill serve: the random delay is
+// up, or (compaction mode) jitter after the Nth compact was sent, so the
+// kill tends to land inside or right after a compaction. It returns true
+// if serve died first, which only an armed crash point should cause.
+func (s *session) waitForKill(delay time.Duration, p killPlan) bool {
+	deadline := time.After(delay)
+	sent := 0
+	for {
+		select {
+		case <-deadline:
+			return false
+		case <-s.router.done:
+			return true
+		case <-s.compactSent:
+			if sent++; sent == p.compactN {
+				time.Sleep(p.jitter)
+				return false
+			}
+		}
+	}
 }
 
 // session is one running serve process and the writers talking to it.
@@ -108,12 +149,15 @@ type session struct {
 	killed atomic.Bool
 	stderr *os.File
 
+	compactSent chan struct{} // one tick per compact request sent
+
 	errMu sync.Mutex
 	err   error // first protocol error a writer saw
 }
 
 // startServe starts serve and waits for its READY line.
-func startServe(c config, o *oracle) (*session, error) {
+// env arms a crash point in serve (crashpoints mode); nil otherwise.
+func startServe(c config, o *oracle, env []string) (*session, error) {
 	stderr, err := os.OpenFile(filepath.Join(c.runDir(), "serve.stderr"), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, err
@@ -126,6 +170,7 @@ func startServe(c config, o *oracle) (*session, error) {
 		args = append([]string{"--bug", c.bug}, args...)
 	}
 	cmd := exec.Command(c.bin, args...)
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -141,7 +186,8 @@ func startServe(c config, o *oracle) (*session, error) {
 		stderr.Close()
 		return nil, fmt.Errorf("start serve: %w", err)
 	}
-	s := &session{cmd: cmd, stdin: stdin, oracle: o, router: newRouter(), stderr: stderr}
+	s := &session{cmd: cmd, stdin: stdin, oracle: o, router: newRouter(), stderr: stderr,
+		compactSent: make(chan struct{}, 64)}
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 64<<10), maxLine)
 	if err := s.awaitReady(sc); err != nil {
@@ -188,6 +234,12 @@ func (s *session) runWriter(g *generator) {
 		if err := s.send(req.wire()); err != nil {
 			return // serve is gone; the op stays in flight
 		}
+		if req.compact {
+			select {
+			case s.compactSent <- struct{}{}:
+			default: // nobody counting
+			}
+		}
 		line, ok := <-reply
 		if !ok {
 			return // killed before the reply: the op stays in flight
@@ -216,9 +268,10 @@ func (s *session) setErr(err error) {
 }
 
 // kill sends SIGKILL: no SIGTERM, no stdin close, no chance to clean up.
-func (s *session) kill() {
+// self means serve already died (an armed crash point SIGKILLed it).
+func (s *session) kill(self bool) {
 	s.killed.Store(true)
-	s.oracle.killed()
+	s.oracle.killed(self)
 	s.cmd.Process.Signal(syscall.SIGKILL) // error means it already exited; wait reports that
 }
 
@@ -313,11 +366,13 @@ func (r *router) strays() []string {
 }
 
 // recoverAndDump runs open, then check, then dump (brief section 7, step 5)
-// and returns the dumped state and open's recovery time.
-func recoverAndDump(c config) (map[string]string, string, error) {
+// and returns the dumped state, open's recovery time and open's wall time.
+func recoverAndDump(c config) (map[string]string, string, time.Duration, error) {
+	start := time.Now()
 	out, err := runCLI(c, "open")
+	openTime := time.Since(start)
 	if err != nil {
-		return nil, "", err
+		return nil, "", openTime, err
 	}
 	recMS := "?"
 	for _, f := range strings.Fields(out) {
@@ -326,16 +381,46 @@ func recoverAndDump(c config) (map[string]string, string, error) {
 		}
 	}
 	if out, err = runCLI(c, "check"); err != nil {
-		return nil, recMS, err
+		return nil, recMS, openTime, err
 	}
 	if strings.TrimSpace(out) != "OK" {
-		return nil, recMS, fmt.Errorf("check printed %q, want OK", strings.TrimSpace(out))
+		return nil, recMS, openTime, fmt.Errorf("check printed %q, want OK", strings.TrimSpace(out))
 	}
 	if out, err = runCLI(c, "dump"); err != nil {
-		return nil, recMS, err
+		return nil, recMS, openTime, err
 	}
 	state, err := parseDump(out)
-	return state, recMS, err
+	return state, recMS, openTime, err
+}
+
+// openUntilKilled runs open with env added and SIGKILLs it after delay
+// (delay 0: never; it may die from an armed crash point). killed reports
+// that SIGKILL ended it; a clean exit 0 means open finished first. Any other
+// end, or running past cliTimeout, is an error.
+func openUntilKilled(c config, env []string, delay time.Duration) (killed bool, err error) {
+	cmd := exec.Command(c.bin, c.cliArgs("open", diskFullBytes(c.mode, c.maxBytes))...)
+	cmd.Env = append(os.Environ(), env...)
+	var out strings.Builder
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Start(); err != nil {
+		return false, err
+	}
+	var timedOut atomic.Bool
+	if delay > 0 {
+		defer time.AfterFunc(delay, func() { cmd.Process.Signal(syscall.SIGKILL) }).Stop()
+	}
+	defer time.AfterFunc(cliTimeout, func() { timedOut.Store(true); cmd.Process.Signal(syscall.SIGKILL) }).Stop()
+	err = cmd.Wait()
+	if err == nil {
+		return false, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && !timedOut.Load() {
+		if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() && ws.Signal() == syscall.SIGKILL {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("open (env %v) did not exit 0 or die by SIGKILL: %v (timed out: %v)\n%s", env, err, timedOut.Load(), out.String())
 }
 
 // runCLI runs one ninelives command and returns its stdout. A non-zero exit

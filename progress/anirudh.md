@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 16:50 IST   Branch: anirudh/L4-L5-modes-docs   Current PR: L4+L5
+Last updated: 2026-11-06 17:45 IST   Branch: anirudh/X1-test-shell   Current PR: X1 (nlshell)
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -31,17 +31,21 @@ Last updated: 2026-11-06 16:50 IST   Branch: anirudh/L4-L5-modes-docs   Current 
 - L4 + L3 fixes (232cc6c, tests 0f7de56): recovery-crash, compaction, crashpoints modes; large-values to 1 MiB, large-batch to 10,000, disk-full cap 128 KiB; ERR other than DISKFULL fails the run.
 - L5: BREAKING.md rechecked against code (b0e36f3) and section 4 filled; SCENARIOS.md 30 PASS / 2 NOT VERIFIED; ARCHITECTURE.md Verified-by filled with modes + seeds (90d6bd3).
 - Real-disk torture, all PASS: default 12345 x500, large-values 999, large-batch 31337, disk-full 2024 (3048 DISKFULL), recovery-crash 42 (99/188 open kills landed), compaction 7 (x100 each), crashpoints 1306 x130 (91 crash points fired).
+- Integration on local `main` (not pushed): PR #9 synced, B1 `scripts/merge-prompts.sh` + PROMPTS.md (54 prompts), PROGRESS.md rewritten, fresh-clone deadline checklist, judge-style torture on new seeds all PASS (bd37135..a4ff291).
+- X1: `scripts/nlshell` interactive test menu (b13d7ef, tests ef85496). Checked on a real pty via `script`: suggestions, Tab, arrows, /crash, /serve + !kill, /recover.
 ## In progress
-- (none) L4/L5 committed on `anirudh/L4-L5-modes-docs`, not pushed.
+- (none) X1 committed on `anirudh/X1-test-shell`, branched from local `main`; nothing pushed.
 ## Next
-1. Push `anirudh/L4-L5-modes-docs`, open PR, merge.
-2. As integrator on `main`: update PROGRESS.md (everything merged so far; scenarios 30/32).
-3. B1: assemble PROMPTS.md in time order; deadline checklist.
-4. Optional: tests for C6 (kill inside Close) and D4 (Get during Batch) to close the 2 NOT VERIFIED rows.
+1. Push `main` (7 commits ahead), then `anirudh/X1-test-shell`, PR, merge.
+2. Before the deadline: `sh scripts/merge-prompts.sh`, commit, push.
+3. Team: settle the three planning prompts timed before 11:20; add docs/brief.pdf; CODEOWNERS logins.
+4. Demo prep: crash-here answers, TTL design extension.
 ## Blockers / needs from others
 - Khushi (K4): `diagrams/architecture.png`, embedded at the top of ARCHITECTURE.md, does not exist yet. Until it lands the image link is broken; the Mermaid in ARCHITECTURE.md is complete on its own.
 - Team: TaskSplit.md still lists Likith as owner of `torture/**`, BREAKING.md, docs/SCENARIOS.md. TaskSplit.md is frozen; the ownership change needs a `contract/*` PR approved by all three.
 ## Decisions (and why)
+- nlshell lives in `scripts/` (integrator-owned, not part of the database) and uses `stty` for raw mode: x/term would break the stdlib-only rule.
+- nlshell prints every shell command it runs: the demo is without tools, so it must teach the commands, not hide them.
 - Torture: kill delay 1-400 ms, timed from READY, so kills land while both writers are mid-stream (and inside fsyncs), never "after N ops".
 - Torture: the run dir `runs/<seed>/` is wiped at start and the DB carries over between iterations, so `--seed S --iterations N` replays everything up to iteration N.
 - Torture: op ids are iter*10,000,000 + n*2 + (writer-1): unique for the whole run and independent of scheduling, so tags are reproducible too.

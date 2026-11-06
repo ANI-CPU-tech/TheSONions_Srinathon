@@ -1,6 +1,8 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 23:30 IST   Branch: anirudh/X3-watch   Current PR: X3 (not opened yet)
+Last updated: 2026-11-07 02:10 IST   Branch: anirudh/X4-nlshell-banner   Current PR: X4 (not opened yet)
 ## Done
+- X4 nlshell welcome screen (Gemini-CLI style): NINELIVES block letters with a ░ drop shadow and a brown-to-orange gradient, numbered tips, status line with repo dir, demo db and build state (c86505a, wired in 0a14973). Real terminal only; piped input keeps the old plain line. 24-bit colour if COLORTERM says so, else xterm-256; NO_COLOR honoured; one-line title under 68 columns. Checked on a pty via `script` (100 and 50 columns, NO_COLOR, no COLORTERM); `go test ./...` green.
+- Miro board (team board uXjVERbFfok=): seven new 3600x1800 frames below the old ones, drawn from the code as it is now: 08 Architecture (as built), 09 System Map, 10 CLI and serve, 11 Torture (as built), 12 nlshell, 13 nlui, 14 What changed (first plan vs as built, with links). Old frames 06 and 07 left untouched; they still show the first plan (16-byte header, LSN = offset, one mutex).
 - docs/TESTING.md: the hand-test commands in order (nlshell), with expected output; pushed to main (commit 28bbf8a)
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -38,6 +40,7 @@ Last updated: 2026-11-06 23:30 IST   Branch: anirudh/X3-watch   Current PR: X3 (
 - X3 watch mode (`scripts/nlui/watch.go`): GET /api/watch polls demo.db read-only every 100 ms and streams changes made from a terminal, with an inferred code path. Done and checked in headless Chromium with real terminal commands (put, batch, mid_write crash, open, compact); docs/TESTING.md updated. Next: push and PR.
 - X2 NineLives Lab (`scripts/nlui`, plan approved 22:35): guarded loopback server, read-only DB decoder (engine codec, cross-checked against engine Stats), argv-only job runner (own process group, SIGINT then SIGKILL on cancel), the command catalogue + /api/run (all 13 crash points and F4 pass end to end in the tests), the code-path model + evidence-based trace (tests check every named function and crash point against the source) and the interactive serve session (SIGKILL, stdin EOF; op ids tracked with serve's own rules, checked against the real serve), the torture output parser and the web page (CLI, Serve + kill, Crash lab, Torture, Build + tests; checked in headless Chromium: put, all 14 crash scenarios, serve put/batch/get/SIGKILL/recover, torture 8 iterations, self-test, Stop, light and dark) done; docs/TESTING.md section 7 written. Next: Khushi wires it into build.sh + README (see Blockers), then PR.
 ## Next
+0. X4: user eyeballs `./bin/nlshell` in their own terminal, then push `anirudh/X4-nlshell-banner`, PR, merge (no squash).
 1. Push `main` (7 commits ahead), then `anirudh/X1-test-shell`, PR, merge.
 2. Before the deadline: `sh scripts/merge-prompts.sh`, commit, push.
 3. Team: settle the three planning prompts timed before 11:20; add docs/brief.pdf; CODEOWNERS logins.

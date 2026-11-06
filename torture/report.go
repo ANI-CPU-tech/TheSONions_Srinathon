@@ -10,14 +10,21 @@ import (
 
 // summary is the one line printed after each passing iteration.
 func summary(c config, r result) string {
-	return fmt.Sprintf("iter %d/%d ok  delay=%dms sent=%d acked=%d err=%d inflight=%d keys=%d recovery_ms=%s",
+	line := fmt.Sprintf("iter %d/%d ok  delay=%dms sent=%d acked=%d err=%d inflight=%d keys=%d recovery_ms=%s",
 		r.iter, c.iterations, r.delay.Milliseconds(), r.sent, r.acked, r.errs, r.flight, r.keys, r.recoveryMS)
+	if r.note != "" {
+		line += "  [" + r.note + "]"
+	}
+	return line
 }
 
 // reportFailure prints the first failure and returns it.
 func reportFailure(out io.Writer, c config, r result, err error) error {
 	fmt.Fprintf(out, "FAIL iter %d/%d delay=%dms sent=%d acked=%d err=%d inflight=%d\n",
 		r.iter, c.iterations, r.delay.Milliseconds(), r.sent, r.acked, r.errs, r.flight)
+	if r.note != "" {
+		fmt.Fprintf(out, "  plan: %s\n", r.note)
+	}
 	fmt.Fprintf(out, "  %v\n", err)
 	if vf, ok := err.(*verifyFailure); ok {
 		fmt.Fprintf(out, "  key=%q found=%q expected=%v opids=%v\n", vf.key, vf.found, vf.expect, vf.opids)

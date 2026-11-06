@@ -189,6 +189,10 @@ func serve(path string) error {
 	for in.Scan() {
 		auto++
 		opid, req := splitPrefix(in.Text(), auto)
+		if strings.TrimSpace(req) == "compact" {
+			fmt.Printf("ACK %s 0\n", opid) // nothing to compact in a text log; like serve, seq 0
+			continue
+		}
 		ops, isBatch, err := readRequest(req, in)
 		if err != nil {
 			fmt.Printf("ERR %s BADREQ %v\n", opid, err)

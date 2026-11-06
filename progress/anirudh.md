@@ -1,5 +1,5 @@
 # Progress: Anirudh
-Last updated: 2026-11-06 14:45 IST   Branch: anirudh/L1-harness   Current PR: L1
+Last updated: 2026-11-06 16:50 IST   Branch: anirudh/L4-L5-modes-docs   Current PR: L4+L5
 ## Done
 - B0 bootstrap committed to `main` as integrator (commits a0ca0d9..7eaa156)
 - Project scaffold on `main`: empty files per responsibility in src/engine, src/cmd/ninelives, torture, tests, diagrams
@@ -28,17 +28,18 @@ Last updated: 2026-11-06 14:45 IST   Branch: anirudh/L1-harness   Current PR: L1
 - A6: crash tests pin the in-flight outcome: absent before/during WriteAt, present after fsync (commit 1e3362f)
 - A6: ARCHITECTURE.md: Mermaid component + recovery diagrams, byte layout, numbered write order, 32-row proof table, three guarantees (commit 4607f79)
 - L1 (taken over from Likith, 2026-11-06 14:23): seeded op stream + tagged values (c4f7e3c), oracle.log (1fd217e), kill/recover loop with open/check/dump and summaries (fc13361), honest fakeserve (9ef96fc), tests (05f7ae4). 8 iterations vs fakeserve: PASS, 9k-42k ops per iteration, 0-1 ops in flight at each kill.
+- L4 + L3 fixes (232cc6c, tests 0f7de56): recovery-crash, compaction, crashpoints modes; large-values to 1 MiB, large-batch to 10,000, disk-full cap 128 KiB; ERR other than DISKFULL fails the run.
+- L5: BREAKING.md rechecked against code (b0e36f3) and section 4 filled; SCENARIOS.md 30 PASS / 2 NOT VERIFIED; ARCHITECTURE.md Verified-by filled with modes + seeds (90d6bd3).
+- Real-disk torture, all PASS: default 12345 x500, large-values 999, large-batch 31337, disk-full 2024 (3048 DISKFULL), recovery-crash 42 (99/188 open kills landed), compaction 7 (x100 each), crashpoints 1306 x130 (91 crash points fired).
 ## In progress
-- (none) A6 and L1 committed locally, not pushed. `anirudh/L1-harness` is branched from the A6 tip: merge A6 first, then L1.
+- (none) L4/L5 committed on `anirudh/L4-L5-modes-docs`, not pushed.
 ## Next
-1. Push `anirudh/A6-architecture`, open the A6 PR, merge. Then push `anirudh/L1-harness`, open the L1 PR, merge.
-2. L2: verifier (SPEC section 13 rules 4-9) on the in-memory oracle records + base state; fakeserve `--bug=drop-ack|partial-batch|garbage|stale` (read from an env var, since the harness builds fakeserve's argv); failure report with expected vs found.
-3. First real run once Khushi's K2 serve lands: `./bin/torture --seed 1 --iterations 50`.
-4. As integrator on `main`: update PROGRESS.md (A1-A5 merged, A6 and L1 status, torture track now Anirudh's). It still says nothing is merged.
-5. Revisit ARCHITECTURE.md "Verified by" once torture modes run: replace "not verified yet" with mode + seed (A7, B6, D1-D3, F1, F2).
+1. Push `anirudh/L4-L5-modes-docs`, open PR, merge.
+2. As integrator on `main`: update PROGRESS.md (everything merged so far; scenarios 30/32).
+3. B1: assemble PROMPTS.md in time order; deadline checklist.
+4. Optional: tests for C6 (kill inside Close) and D4 (Get during Batch) to close the 2 NOT VERIFIED rows.
 ## Blockers / needs from others
 - Khushi (K4): `diagrams/architecture.png`, embedded at the top of ARCHITECTURE.md, does not exist yet. Until it lands the image link is broken; the Mermaid in ARCHITECTURE.md is complete on its own.
-- Khushi (K2): real `serve`. Torture is only tested against fakeserve until it lands.
 - Team: TaskSplit.md still lists Likith as owner of `torture/**`, BREAKING.md, docs/SCENARIOS.md. TaskSplit.md is frozen; the ownership change needs a `contract/*` PR approved by all three.
 ## Decisions (and why)
 - Torture: kill delay 1-400 ms, timed from READY, so kills land while both writers are mid-stream (and inside fsyncs), never "after N ops".

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -41,10 +42,6 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if !implemented(c.mode) {
-		fmt.Fprintf(os.Stderr, "torture: mode %q is not wired up yet (PRs L3/L4, needs A4/A5 and K2)\n", c.mode)
-		os.Exit(2)
-	}
 	if err := run(c, os.Stdout); err != nil {
 		os.Exit(1)
 	}
@@ -65,13 +62,15 @@ func run(c config, out io.Writer) error {
 		return reportSetup(out, err)
 	}
 	defer o.close()
+	o.allowDiskFull = diskFullBytes(c.mode, c.maxBytes) > 0
 	o.note("# torture seed=%d mode=%s iterations=%d bin=%s", c.seed, c.mode, c.iterations, c.bin)
 	fmt.Fprintf(out, "torture: seed=%d mode=%s iterations=%d, oracle log %s\n",
 		c.seed, c.mode, c.iterations, filepath.Join(c.runDir(), "oracle.log"))
 	// base is the previously verified dump; iteration 1 starts from nil (SPEC rule 9).
 	base := map[string]string{}
+	openTime := 5 * time.Millisecond // until the first full open() is measured
 	for iter := 1; iter <= c.iterations; iter++ {
-		res, err := runIteration(c, o, iter)
+		res, err := runIteration(c, o, iter, openTime)
 		if err != nil {
 			o.note("FAIL %d %v", iter, err)
 			o.flush()
@@ -88,6 +87,7 @@ func run(c config, out io.Writer) error {
 		}
 		fmt.Fprintln(out, summary(c, res))
 		base = res.state // the verified dump becomes the base for the next iteration
+		openTime = res.openTime
 	}
 	fmt.Fprintf(out, "PASS %d/%d iterations (seed %d, mode %s)\n", c.iterations, c.iterations, c.seed, c.mode)
 	return nil

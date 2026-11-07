@@ -45,6 +45,238 @@ go build -o bin/ninelives ./src/cmd/ninelives
 go build -o bin/torture   ./torture
 ```
 
+## Test it yourself: what a judge runs
+
+Every step below is copy-paste from the repository root, in this order. The
+outputs are real, captured from a fresh clone on 2026-11-07 (Linux, Go
+1.27.3). `recovery_ms`, torture counts and timings are measured live, so
+yours will differ; everything else should match exactly.
+
+### Step 0. Clone, build, run the test suite
+
+```sh
+git clone https://github.com/ANI-CPU-tech/TheSONions_Srinathon.git
+cd TheSONions_Srinathon
+go version          # must say go1.27 or newer
+scripts/build.sh    # builds bin/ninelives and bin/torture; no network needed
+go vet ./...        # prints nothing
+go test ./...       # about 20 s; includes the 1M-key recovery test
+```
+
+```console
+built bin/ninelives and bin/torture
+ok  	ninelives/scripts/nlshell	0.242s
+ok  	ninelives/scripts/nlui	5.102s
+ok  	ninelives/src/cmd/ninelives	0.004s
+?   	ninelives/src/engine	[no test files]
+ok  	ninelives/tests/cli	0.727s
+ok  	ninelives/tests/engine	2.958s
+ok  	ninelives/torture	7.241s
+?   	ninelives/torture/fakeserve	[no test files]
+```
+
+(`src/engine` has no test files of its own: its tests live in `tests/engine`,
+so they use only the public API.)
+
+### Step 1. Every CLI command, with the exit codes
+
+```console
+$ ./bin/ninelives open judge.db
+keys=0 recovery_ms=0
+$ ./bin/ninelives put judge.db user:1 alice
+OK seq=1
+$ ./bin/ninelives put judge.db user:2 x:00ff
+OK seq=2
+$ ./bin/ninelives get judge.db user:1
+alice
+$ ./bin/ninelives get judge.db user:99
+NOTFOUND
+$ ./bin/ninelives del judge.db user:1
+OK seq=3
+$ printf 'put k1 v1\nput k2 v2\ndel k1\n' > ops.txt
+$ ./bin/ninelives batch judge.db ops.txt
+OK seq=4
+$ ./bin/ninelives dump judge.db
+k2 v2
+user:2 x:00ff
+$ ./bin/ninelives check judge.db
+OK
+$ ./bin/ninelives compact judge.db
+OK
+$ ./bin/ninelives open judge.db
+keys=2 recovery_ms=0
+$ ./bin/ninelives frobnicate; echo "exit=$?"         # usage error
+ninelives: unknown command "frobnicate"
+usage:
+  ninelives open    <path> [--max-bytes N]
+  ...                                  (the rest of the usage block)
+exit=2
+$ ./bin/ninelives put judge.db big "$(head -c 500 /dev/zero | tr '\0' v)" --max-bytes 100; echo "exit=$?"
+ninelives put: ninelives: disk full (max_bytes reached)
+exit=3
+```
+
+What to look for: the batch is one record (`seq=4`) and applies in order
+(`put k1` then `del k1` leaves no `k1`); `dump` is sorted by raw key bytes;
+exit codes are 0, 2 (usage) and 3 (disk full), as in the
+[table below](#output-and-exit-codes-exactly-what-scripts-and-the-torture-tool-rely-on).
+
+### Step 2. serve, then a real SIGKILL
+
+By hand, in two terminals:
+
+```sh
+# terminal 1
+./bin/ninelives serve serve.db
+# type: put a 1   then: batch 2   put b 2   del a   then: get b
+# terminal 2
+pkill -9 -f 'ninelives serve'
+# terminal 1 again
+./bin/ninelives check serve.db && ./bin/ninelives dump serve.db
+```
+
+The same thing as one script (real output):
+
+```console
+$ (printf "put a 1\nbatch 2\nput b 2\ndel a\nget b\n"; sleep 5) | ./bin/ninelives serve serve.db &
+READY keys=0 recovery_ms=0
+ACK 1 1
+ACK 2 2
+VAL 3 2
+$ kill -9 $!
+$ ./bin/ninelives check serve.db
+OK
+$ ./bin/ninelives dump serve.db
+b 2
+```
+
+Every `ACK` was printed after its fsync, so both acked writes survive the
+kill: `a` was put and then deleted by the batch, `b` is there.
+
+### Step 3. Kill it at an exact line of code (crash points)
+
+The engine can SIGKILL itself at 13 named points. `mid_write` dies halfway
+through writing a record, leaving a torn tail on disk:
+
+```console
+$ ./bin/ninelives put crash.db a 1
+OK seq=1
+$ NINELIVES_CRASH_AT=mid_write ./bin/ninelives put crash.db b 2; echo "exit=$?"
+Killed                                 (bash's message; zsh says "killed")
+exit=137
+$ ./bin/ninelives check crash.db
+CORRUPT: ninelives: corrupt file: torn tail at offset 49 (file is 61 bytes)
+$ ./bin/ninelives open crash.db
+keys=1 recovery_ms=0
+$ ./bin/ninelives check crash.db
+OK
+$ ./bin/ninelives dump crash.db
+a 1
+```
+
+`check` is read-only, so it reports the torn tail; `open` runs recovery and
+cuts it. The acked `a 1` survives, the never-acked `b 2` is gone. All 13
+points (`before_write`, `mid_write`, `after_write`, `after_fsync`,
+`after_index`, `batch_mid_write`, `compact_mid_temp`,
+`compact_after_temp_fsync`, `compact_after_rename`, `compact_after_dir_fsync`,
+`recovery_mid_scan`, `recovery_before_truncate`, `recovery_after_truncate`)
+are checked by one test:
+
+```sh
+go test ./tests/engine -run TestCrashPoints -v
+```
+
+### Step 4. The torture tool, every mode
+
+The judge's command is `./bin/torture --iterations 500 --seed <any number>`.
+Each mode below stresses something different; every run must end with
+`PASS n/n` and exit 0. Use a seed nobody has used before.
+
+| Mode | Command | What changes |
+|---|---|---|
+| `default` | `./bin/torture --seed 80421 --iterations 500` | 2 writers send puts, dels and 2–10-op batches; SIGKILL at a random 1–400 ms after `READY` |
+| `large-values` | `./bin/torture --seed 5150 --iterations 100 --mode large-values` | values up to 1 MiB; a quarter are exactly 1 MiB |
+| `large-batch` | `./bin/torture --seed 2718 --iterations 100 --mode large-batch` | batches up to 10,000 ops; half are exactly 10,000 |
+| `disk-full` | `./bin/torture --seed 1618 --iterations 100 --mode disk-full` | serve gets `--max-bytes 131072`, so writes keep hitting the cap |
+| `recovery-crash` | `./bin/torture --seed 4711 --iterations 100 --mode recovery-crash` | after the kill, 1–3 `open()`s are SIGKILLed during recovery |
+| `compaction` | `./bin/torture --seed 777 --iterations 100 --mode compaction` | 5% of requests are `compact`; SIGKILL 0–3 ms after the 1st–5th one |
+| `crashpoints` | `./bin/torture --seed 9001 --iterations 130 --mode crashpoints` | each iteration arms one of the 13 crash points, in turn |
+
+A run looks like this (seed 1073356830, the first 3 of 20 iterations):
+
+```console
+torture: seed=1073356830 mode=default iterations=20, oracle log runs/1073356830/oracle.log
+iter 1/20 ok  delay=225ms sent=17485 acked=17483 err=0 inflight=2 keys=46 recovery_ms=3
+iter 2/20 ok  delay=31ms sent=2293 acked=2292 err=0 inflight=1 keys=46 recovery_ms=7
+iter 3/20 ok  delay=4ms sent=237 acked=235 err=0 inflight=2 keys=51 recovery_ms=4
+…
+PASS 20/20 iterations (seed 1073356830, mode default)
+```
+
+That run used tmpfs (RAM), where fsync costs nothing, hence the high
+`sent` counts. On a real disk each fsync waits for the device, so fewer ops
+fit before the kill. Run it on a real disk for the honest test.
+
+### Step 5. Prove the checker is not rigged
+
+`torture/fakeserve` is a deliberately broken server. Each `--bug` breaks one
+promise; the oracle must catch every one of them (exit 1), and must pass the
+honest version:
+
+```console
+$ go build -o bin/fakeserve ./torture/fakeserve
+$ ./bin/torture --seed 11 --iterations 5 --bin ./bin/fakeserve --bug drop-ack --dir runs/selftest | tail -1
+FAILED after 0 of 5 iterations passed (seed 11, mode default)
+$ ./bin/torture --seed 11 --iterations 5 --bin ./bin/fakeserve --bug partial-batch --dir runs/selftest | tail -1
+FAILED after 0 of 5 iterations passed (seed 11, mode default)
+$ ./bin/torture --seed 11 --iterations 5 --bin ./bin/fakeserve --bug garbage --dir runs/selftest | tail -1
+FAILED after 0 of 5 iterations passed (seed 11, mode default)
+$ ./bin/torture --seed 11 --iterations 5 --bin ./bin/fakeserve --bug stale --dir runs/selftest | tail -1
+FAILED after 0 of 5 iterations passed (seed 11, mode default)
+$ ./bin/torture --seed 12 --iterations 3 --bin ./bin/fakeserve --bug none --dir runs/selftest | tail -1
+PASS 3/3 iterations (seed 12, mode default)
+```
+
+`drop-ack` loses an acked write, `partial-batch` applies half a batch,
+`garbage` returns a value nobody wrote, `stale` returns an old value.
+
+### Step 6. One million keys, recovered in under 2 seconds
+
+```console
+$ go test ./tests/engine -run TestRecoveryMillionKeysUnder2s -v
+=== RUN   TestRecoveryMillionKeysUnder2s
+    recovery_bench_test.go:59: 1M keys, 127 MB file: open 380.984605ms (Stats.RecoveryTime 380.984253ms)
+--- PASS: TestRecoveryMillionKeysUnder2s (0.55s)
+```
+
+The test fails if `open()` takes more than 2 s. Details and graphs:
+[Benchmarks](#benchmarks).
+
+### Step 7 (optional). The same tests from a menu or a window
+
+```sh
+go build -o bin/nlshell ./scripts/nlshell && ./bin/nlshell    # terminal menu
+go build -o bin/nlui    ./scripts/nlui    && ./bin/nlui        # local window, 127.0.0.1 only
+```
+
+These are the two tools in the screenshot at the top. Each one prints the
+exact command it runs. The full list of menu commands and what each should
+print is in [docs/TESTING.md](docs/TESTING.md).
+
+### Checklist
+
+| What the brief asks | Command | Pass looks like |
+|---|---|---|
+| One-command build, no dependencies | `scripts/build.sh` | `built bin/ninelives and bin/torture` |
+| All CLI commands and exit codes | Step 1 | outputs above; exit 0, 2, 3 |
+| Acked writes survive SIGKILL | Step 2, Step 4 | `check` says `OK`; `PASS n/n` |
+| Torn writes are cut, never guessed | Step 3 | `CORRUPT` before `open`, `OK` after |
+| Batches are all-or-nothing | `--mode large-batch`, `crashpoints` (`batch_mid_write`) | `PASS n/n` |
+| Disk full is clean | Step 1 (exit 3), `--mode disk-full` | `PASS n/n` |
+| Recovery survives being killed | `--mode recovery-crash` | `PASS n/n` |
+| The checker catches real bugs | Step 5 | 4 × `FAILED`, then `PASS 3/3` |
+| 1M keys open in under 2 s | Step 6 | `--- PASS`, about 0.4 s |
+
 ## Quick tour
 
 Every block below is real output from a real run (start from an empty file):
@@ -409,7 +641,7 @@ PASS 3/3 iterations (seed 12345, mode default)
 |---|---|
 | `--seed <n>` | **mandatory**; every random decision derives from it |
 | `--iterations <n>` | kill/restart loops (default 500) |
-| `--mode <m>` | `default`, `large-values`, `large-batch`, `disk-full`, `recovery-crash`, `compaction`, `crashpoints` (all 7 work) |
+| `--mode <m>` | `default`, `large-values`, `large-batch`, `disk-full`, `recovery-crash`, `compaction`, `crashpoints` (all 7 work; see [Step 4](#step-4-the-torture-tool-every-mode)) |
 | `--bin <path>` | the `ninelives` binary (default `./bin/ninelives`) |
 | `--dir <path>` | where `runs/<seed>/` databases and `oracle.log` go (default `runs/`) |
 | `--max-bytes <n>` | forwarded to serve |
@@ -437,6 +669,10 @@ src/cmd/ninelives/  the CLI and serve (this README's subject)
 torture/          the kill-it-and-prove-it harness
 tests/            engine and CLI integration tests (go test ./...)
 scripts/build.sh  the one build command
+scripts/nlshell/  terminal test menu (optional demo tool)
+scripts/nlui/     NineLives Lab, a local test window (optional demo tool)
+site/             static showcase page (open site/index.html)
+docs/TESTING.md   every hand test, in order, with expected output
 diagrams/         Mermaid sources + exported PNGs
 docs/SPEC.md      the frozen design contract
 ARCHITECTURE.md   mechanisms and the 32-scenario proof table

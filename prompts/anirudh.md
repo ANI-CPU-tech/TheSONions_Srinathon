@@ -463,3 +463,8 @@ I need it to be production-level and industrial-grade quality!
 [Image #20] There has been some error in the deployment fix this
 
 (Image #20: screenshot of the failed GitHub Actions "pages" run #1 for PR #14: actions/configure-pages@v5 failed with "Get Pages site failed ... HttpError: Not Found".)
+
+### 2026-11-07 09:31 (local time) | Tool: Claude Code | Branch: main
+Cud u now update the readme add the appropriate commands to clone the repo and test everything,[Image #21] add this image too in the readme and also show how exactly the judge will test all our commands and also at the same time explain all the benchmarks we have set with proper graphs and everything. commit and push all the commits to main and dont add urself as a contributor.
+
+(Image #21: screenshot of nlshell (left: NineLives banner, tips, /build, /test, /test-crashpoints output) next to the nlui "NineLives Lab" web page (right: CLI tab with put/get/del/batch, disk view, console).)

@@ -4,7 +4,21 @@ A crash-safe embedded key-value database in Go — standard library only — plu
 torture tool that SIGKILLs it at random moments and proves no acknowledged
 write is ever lost. Built for the "Kill It and Prove It" hackathon.
 
-**The three guarantees**
+![nlshell (left) and the NineLives Lab window (right)](docs/nlshell-and-nlui.png)
+
+*Left: `nlshell`, the test menu (`/build`, `/test`, `/test-crashpoints`, …).
+Right: NineLives Lab (`scripts/nlui`), the same commands in a local window
+with the database file drawn record by record. Both are optional demo tools;
+everything they do is plain `./bin/ninelives` and `./bin/torture` commands,
+listed in [Test it yourself](#test-it-yourself-what-a-judge-runs).*
+
+**Contents:** [Guarantees](#the-three-guarantees) ·
+[Clone and test](#test-it-yourself-what-a-judge-runs) ·
+[Benchmarks](#benchmarks) · [Commands](#commands) · [serve](#serve-the-long-running-protocol) ·
+[File format](#on-disk-format) · [Recovery](#recovery-in-plain-english) ·
+[Torture tool](#running-the-torture-tool) · [Layout](#repository-layout)
+
+## The three guarantees
 
 1. `put`, `del` and `batch` return success only after the record is written and
    fsynced. A printed `ACK`/`OK seq=` means the data is on disk, even if the

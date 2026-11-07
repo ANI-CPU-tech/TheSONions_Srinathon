@@ -99,7 +99,8 @@ before or after the path).
 | Command | Output | Exit |
 |---|---|---|
 | `open` | `keys=<n> recovery_ms=<ms>` | 0 |
-| `put` / `del` / `batch` / `compact` | `OK seq=<n>` | 0 |
+| `put` / `del` / `batch` | `OK seq=<n>` | 0 |
+| `compact` | `OK` | 0 |
 | `get` hit | the value token | 0 |
 | `get` miss | `NOTFOUND` | 0 |
 | `dump` | `<key> <value>` per line, sorted by raw key bytes | 0 |
@@ -408,7 +409,7 @@ PASS 3/3 iterations (seed 12345, mode default)
 |---|---|
 | `--seed <n>` | **mandatory**; every random decision derives from it |
 | `--iterations <n>` | kill/restart loops (default 500) |
-| `--mode <m>` | `default`, `large-values`, `large-batch`, `disk-full` are implemented; `recovery-crash`, `compaction`, `crashpoints` land in PR L4 and currently exit 2 with an explicit "not wired up yet" message |
+| `--mode <m>` | `default`, `large-values`, `large-batch`, `disk-full`, `recovery-crash`, `compaction`, `crashpoints` (all 7 work) |
 | `--bin <path>` | the `ninelives` binary (default `./bin/ninelives`) |
 | `--dir <path>` | where `runs/<seed>/` databases and `oracle.log` go (default `runs/`) |
 | `--max-bytes <n>` | forwarded to serve |

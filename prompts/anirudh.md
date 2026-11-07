@@ -458,3 +458,8 @@ I need it to be production-level and industrial-grade quality!
 </pasted text>
 
 (Answers to Claude Code's questions: site/ + GitHub Pages; include nlshell + nlui; no team or hackathon credits; hero = replay of real output.)
+
+### 2026-11-07 08:08 (local time) | Tool: Claude Code | Branch: main
+[Image #20] There has been some error in the deployment fix this
+
+(Image #20: screenshot of the failed GitHub Actions "pages" run #1 for PR #14: actions/configure-pages@v5 failed with "Get Pages site failed ... HttpError: Not Found".)
